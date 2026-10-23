@@ -1,0 +1,86 @@
+{
+  "schema": [
+    {
+      "name": "walkSpeed",
+      "type": "number",
+      "label": "Walk Speed",
+      "default": 4.2,
+      "min": 2.0,
+      "max": 7.0,
+      "step": 0.2
+    },
+    {
+      "name": "sprintSpeed",
+      "type": "number",
+      "label": "Sprint Speed",
+      "default": 6.8,
+      "min": 4.0,
+      "max": 10.0,
+      "step": 0.5
+    },
+    {
+      "name": "maxStamina",
+      "type": "number",
+      "label": "Max Stamina",
+      "default": 100,
+      "min": 50,
+      "max": 200,
+      "step": 10
+    },
+    {
+      "name": "jinnSpeed",
+      "type": "number",
+      "label": "Jinn Patrol Speed",
+      "default": 2.8,
+      "min": 1.5,
+      "max": 5.0,
+      "step": 0.1
+    },
+    {
+      "name": "jinnHuntSpeed",
+      "type": "number",
+      "label": "Jinn Hunt Speed",
+      "default": 5.2,
+      "min": 3.0,
+      "max": 7.5,
+      "step": 0.2
+    },
+    {
+      "name": "maxFear",
+      "type": "number",
+      "label": "Max Fear Level",
+      "default": 100,
+      "min": 50,
+      "max": 150,
+      "step": 10
+    },
+    {
+      "name": "totalScriptures",
+      "type": "number",
+      "label": "Required Scriptures",
+      "default": 5,
+      "min": 3,
+      "max": 7,
+      "step": 1
+    },
+    {
+      "name": "flashlightBatteryDrain",
+      "type": "number",
+      "label": "Flashlight Drain Rate",
+      "default": 2.5,
+      "min": 0.5,
+      "max": 8.0,
+      "step": 0.5
+    }
+  ],
+  "values": {
+    "walkSpeed": 4.2,
+    "sprintSpeed": 6.8,
+    "maxStamina": 100,
+    "jinnSpeed": 2.8,
+    "jinnHuntSpeed": 5.2,
+    "maxFear": 100,
+    "totalScriptures": 5,
+    "flashlightBatteryDrain": 2.5
+  }
+}

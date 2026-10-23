@@ -1,0 +1,119 @@
+{
+  "title": "Zamidar Haunt",
+  "hook": "Escape haunted mansion jinn horrors",
+  "game_overview": "Explore an eerie abandoned Bangladeshi mansion, avoid the shadowy roaming Jinn, gather sacred protective scriptures, and unlock the escape gate.",
+  "artstyle": "gritty-horror",
+  "genre": "action_adventure",
+  "winning_condition": "Collect all 5 sacred protective scriptures hidden throughout the Zamidar Bari and unlock the front estate gates to escape.",
+  "losing_condition": "Caught by the roaming Jinn when your fear reaches maximum or the entity intercepts you in the dark corridors.",
+  "player_mode": "single_player",
+  "supported_orientations": [
+    "landscape",
+    "wide"
+  ],
+  "input_methods": [
+    "touch",
+    "mouse",
+    "keyboard"
+  ],
+  "score_options": {
+    "score_type": "points",
+    "score_order": "higher_is_better"
+  },
+  "low_end_device_support": false,
+  "mobile_playable": true,
+  "language": [
+    "en"
+  ],
+  "content_descriptors": [
+    "fear_horror"
+  ],
+  "controls": [
+    {
+      "input": "W / S / Up / Down / Virtual Left Joystick",
+      "action": "Walk forward or backward along 3D hallways (-Z / +Z)."
+    },
+    {
+      "input": "A / D / Left / Right / Virtual Left Joystick",
+      "action": "Strafe left or right laterally across mansion rooms (-X / +X)."
+    },
+    {
+      "input": "Mouse Drag / Right Touch Area / Look Joystick",
+      "action": "First-person camera pitch and yaw rotation to look around 3D space."
+    },
+    {
+      "input": "E / Space / Interact Button",
+      "action": "Inspect furniture, collect glowing protective scriptures, and open doors."
+    },
+    {
+      "input": "F / Flashlight Button",
+      "action": "Toggle handheld flashlight on and off to conserve battery and manage stealth."
+    },
+    {
+      "input": "Shift / Sprint Button",
+      "action": "Sprint briefly to outrun the Jinn when detected at the cost of stamina."
+    }
+  ],
+  "sections": [
+    {
+      "title": "Design Pillars",
+      "content": "1. Authentic Bengali Gothic Horror: Traditional Zamidar Bari architecture featuring arched colonnades, courtyard corridors, weathered terracotta bricks, ornate wooden chests, and candle shrines. 2. Claustrophobic Darkness & Light Management: Tactical reliance on a handheld dynamic flashlight with real-time flickering when supernatural threats draw near. 3. Stealth, Tension, and Ancient Lore: Avoiding the predatory roaming Jinn while searching shadowy furniture and rooms for 5 glowing protective scriptures to banish the gateway seal.",
+      "summary": "Core emotional and atmospheric pillars of the survival horror experience."
+    },
+    {
+      "title": "Core Loop",
+      "content": "Spawn in the grand courtyard of the decaying Zamidar Bari -> Navigate dark corridors and ornate ancestral rooms with flashlight -> Monitor whispering audio and flashlight glitching cues to evade the roaming Jinn -> Search furniture and altars to collect 5 sacred protective scriptures -> Rush back to the main estate wrought-iron gates to break the supernatural seal and escape.",
+      "summary": "Exploration, stealth evasion, scripture discovery, and escape loop."
+    },
+    {
+      "title": "Core Mechanics",
+      "content": "1. First-Person Locomotion: Smooth WASD/touch movement and mouse/drag camera look with head-bobbing and footstep audio. 2. Handheld 3D Flashlight: Directional spotlight mounted to view with battery drain, toggleable states, and proximity-based flickering when within 12 units of the Jinn. 3. Jinn Patrol & Hunt AI: Shadowy ethereal entity with red burning eyes that patrols mansion waypoints, switches to hunt mode on seeing player or hearing running, and warps room lighting. 4. Protective Scripture Shrines: 5 distinct sacred scrolls emitting subtle golden particles and sacred aura hidden in cupboards, chests, and ancestral tables. 5. Sanity & Fear System: Proximity to Jinn causes screen chromatic aberration, heartbeat thumps, and whispering audio.",
+      "summary": "First-person exploration, flashlight mechanics, stealth evasion, and item collection."
+    },
+    {
+      "title": "3D Camera & Movement Alignment",
+      "content": "3D Coordinate System: Standard Three.js right-handed coordinate convention (+Y is Up, +X is Right, -Z is Forward). Camera Perspective: First-person camera positioned at eye level (Y = 1.7m), with smooth yaw and pitch clamping (-85 to +85 degrees) driven by pointer lock or touch look gestures. Movement Dynamics: Kinematic first-person controller with collision bounds, walking speed of 3.8 units/sec, sprint speed of 6.2 units/sec, and smooth deceleration.",
+      "summary": "First-person perspective with standard Three.js right-handed coordinate space."
+    },
+    {
+      "title": "3D Scene Hierarchy & Lighting Mandates",
+      "content": "Atmospheric Aesthetic: Moody midnight storm over a rural estate with dark blue ambient illumination, moonlight pouring through broken skylights, and warm flicker from wall oil lanterns. Interactive Geometry: Ornate wooden almirahs (wardrobes), antique four-poster beds, vintage chairs, terracotta pillars, arched doorways, and glowing scroll pedestals. Visual Hazard Affordance: The roaming Jinn radiates a distinct dark smokey silhouette with glowing crimson eyes and distorting aura. UI & HUD Overlay Integration: Battery meter, stamina bar, scriptures collected counter (0/5), fear meter, and interaction crosshair placed in safe border zones with semi-transparent dark backdrops.",
+      "summary": "Atmospheric midnight Bangladeshi manor lighting with volumetric spotlights."
+    },
+    {
+      "title": "Characters & Enemies",
+      "content": "Player: First-person paranormal investigator with 3D flashlight and stamina. The Jinn (Chhayatmar): A terrifying tall towering shadowy wraith with flowing smokey shroud, horned silhouette, glowing crimson eyes, and hovering levitation animation. When chasing, its aura creates heavy room distortion and whispering soundscapes.",
+      "summary": "The vulnerable investigator and the ethereal roaming Jinn entity."
+    },
+    {
+      "title": "Fairness Tools",
+      "content": "Flashlight flickering intensity and auditory whisper distance scale smoothly based on Jinn distance, providing early warning so the player can hide in shadowy corners or retreat into adjacent rooms.",
+      "summary": "Clear audiovisual cues and proximity warnings."
+    },
+    {
+      "title": "Juice & Game Feel",
+      "content": "Anticipation Juice: Flashlight beam tremors, creaking floorboards, and subtle ambient cricket and wind howling. State Change Juice: Sudden flickering light strobe, rapid heartbeat audio, and screen edge vignette darkening when the Jinn detects the player. Impact Juice: Screen chromatic shake and chilling stinger when spotted, accompanied by radiant golden light explosion upon collecting a protective scripture.",
+      "summary": "High tension horror feedback and atmospheric juice."
+    },
+    {
+      "title": "Social Mechanics & Audience",
+      "content": "Designed for survival horror and folklore mystery fans. Features randomized scripture spawn locations across runs and speedrun escape time leaderboards via the Playground SDK.",
+      "summary": "Target audience and replayability features."
+    },
+    {
+      "title": "Accessibility",
+      "content": "Visual threat radar/indicator option for hearing-impaired players, adjustable mouse/touch sensitivity, and high-contrast UI toggle.",
+      "summary": "Accessibility and visual cue options."
+    },
+    {
+      "title": "Structural Integrity",
+      "content": "Main Menu (Bengali Gothic Title & Lore Intro) -> 3D Mansion Investigation -> In-Game Pause -> Victory Screen (Escaped the Bari with Best Time) / Game Over Screen (Claimed by the Jinn). Full restart and state reset capabilities.",
+      "summary": "State machine and game loop flow."
+    },
+    {
+      "title": "Virtual Touch Controls Implementation",
+      "content": "When mobile device is detected via useIsMobile(), render a virtual floating movement joystick on the bottom-left and dedicated touch buttons (Interact, Flashlight, Sprint) on the bottom-right. Buttons have touch-none class, high z-index, and pointer-events-auto with onPointerDown/Up/Leave/Cancel handlers to avoid stuck states.",
+      "summary": "Responsive mobile controls with virtual joystick and action buttons."
+    }
+  ]
+}
