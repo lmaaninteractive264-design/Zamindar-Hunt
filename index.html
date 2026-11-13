@@ -1,0 +1,1452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Zamidar Haunt</title>
+  <!-- Tailwind CSS Play CDN যুক্ত করুন -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body, #root { width: 100%; height: 100%; overflow: hidden; background: #05070a; }
+    body { font-family: system-ui, -apple-system, sans-serif; }
+    .canvas-wrapper canvas { display: block; }
+  </style>
+  <!-- Three.js and React Three Fiber via CDN (ESM) -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+      "react": "https://esm.sh/react@18.3.1",
+      "react-dom": "https://esm.sh/react-dom@18.3.1",
+      "react-dom/client": "https://esm.sh/react-dom@18.3.1/client",
+      "react/jsx-runtime": "https://esm.sh/react@18.3.1/jsx-runtime?external=react",
+      "react/jsx-dev-runtime": "https://esm.sh/react@18.3.1/jsx-dev-runtime?external=react",
+      "@react-three/fiber": "https://esm.sh/@react-three/fiber@8.17.10?external=react,react-dom,three",
+      "@react-three/postprocessing": "https://esm.sh/@react-three/postprocessing@2.16.3?external=react,react-dom,three,@react-three/fiber",
+      "postprocessing": "https://esm.sh/postprocessing@6.36.4?external=three",
+      "lucide-react": "https://esm.sh/lucide-react@0.344.0?external=react"
+    }
+  }
+</script>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="module">
+    // ================================================================
+    // IMPORTS
+    // ================================================================
+    import React, { useCallback, useEffect, useRef, useState, forwardRef, Suspense, useMemo } from 'react';
+    import { createRoot } from 'react-dom/client';
+    import * as THREE from 'three';
+    import { Canvas, useFrame, useThree } from '@react-three/fiber';
+    import { Bloom, EffectComposer, Vignette } from '@react-three/postprocessing';
+    import { Activity, Flame, Globe, HelpCircle, Play, RotateCw, Volume2, VolumeX, Zap } from 'lucide-react';
+
+    // ================================================================
+    // CONFIG / CONSTANTS
+    // ================================================================
+    const CONFIG = {
+      title: { value: 'Zamidar Haunt', type: 'string', label: 'Game Title', group: 'Game' },
+      fov: { value: 65, type: 'number', label: 'Field of View', group: 'Camera', min: 45, max: 90, step: 5 },
+      cameraX: { value: 0, type: 'number', label: 'Camera X', group: 'Camera' },
+      cameraY: { value: 1.7, type: 'number', label: 'Camera Y (Eye Height)', group: 'Camera' },
+      cameraZ: { value: 14, type: 'number', label: 'Camera Z', group: 'Camera' },
+      backgroundColor: { value: '#05070a', type: 'color', label: 'Atmosphere Tint', group: 'Visuals' },
+      ambientColor: { value: '#151c28', type: 'color', label: 'Ambient Light Color', group: 'Visuals' },
+      ambientIntensity: { value: 1.5, type: 'number', label: 'Ambient Intensity', group: 'Visuals', min: 0.5, max: 3.5, step: 0.1 },
+      sunColor: { value: '#3a4a6e', type: 'color', label: 'Moonlight Color', group: 'Visuals' },
+      sunIntensity: { value: 3.0, type: 'number', label: 'Moonlight Intensity', group: 'Visuals', min: 1.0, max: 6.0, step: 0.2 },
+      hemiSkyColor: { value: '#1e293b', type: 'color', label: 'Sky Gradient', group: 'Visuals' },
+      hemiGroundColor: { value: '#110c08', type: 'color', label: 'Ground Gradient', group: 'Visuals' },
+      hemiIntensity: { value: 0.6, type: 'number', label: 'Hemisphere Fill', group: 'Visuals', min: 0.1, max: 1.5, step: 0.1 },
+      walkSpeed: { value: 4.2, type: 'number', label: 'Walk Speed', group: 'Movement', min: 2.0, max: 7.0, step: 0.2 },
+      sprintSpeed: { value: 6.8, type: 'number', label: 'Sprint Speed', group: 'Movement', min: 4.0, max: 10.0, step: 0.5 },
+      maxStamina: { value: 100, type: 'number', label: 'Max Stamina', group: 'Movement', min: 50, max: 200, step: 10 },
+      jinnSpeed: { value: 2.8, type: 'number', label: 'Jinn Patrol Speed', group: 'Danger', min: 1.5, max: 5.0, step: 0.1 },
+      jinnHuntSpeed: { value: 5.2, type: 'number', label: 'Jinn Hunt Speed', group: 'Danger', min: 3.0, max: 7.5, step: 0.2 },
+      maxFear: { value: 100, type: 'number', label: 'Max Fear Level', group: 'Rules', min: 50, max: 150, step: 10 },
+      totalScriptures: { value: 5, type: 'number', label: 'Required Scriptures', group: 'Rules', min: 3, max: 7, step: 1 },
+      flashlightBatteryDrain: { value: 2.5, type: 'number', label: 'Flashlight Drain Rate', group: 'Flashlight', min: 0.5, max: 8.0, step: 0.5 },
+      targetFPS: { value: 60, type: 'number', label: 'Target FPS', group: 'System' },
+      stepMs: { value: 1000 / 60, type: 'number', label: 'Step MS', group: 'System' },
+      maxSubSteps: { value: 5, type: 'number', label: 'Max Sub Steps', group: 'System' },
+      gravity: { value: -9.81, type: 'number', label: 'Gravity', group: 'Physics' },
+      defaultMusicVolume: { value: 0.35, type: 'number', label: 'Default Music Volume', group: 'Audio', min: 0.0, max: 1.0, step: 0.05 },
+      defaultSfxVolume: { value: 0.7, type: 'number', label: 'Default SFX Volume', group: 'Audio', min: 0.0, max: 1.0, step: 0.05 },
+      backgroundMusicUrl: { value: 'https://storage.googleapis.com/assets-gen-playground/musiclibrary/haunted_hollow.mp3', type: 'string', label: 'Background Music URL', group: 'Audio' },
+    };
+
+    function getConfig(key) { return CONFIG[key].value; }
+
+    const THEME = {
+      fontFamily: "'Cinzel Decorative', 'Georgia', serif",
+      palette: { darkVoid: '#05070a', hauntGold: '#eab308', curseRed: '#dc2626', terracotta: '#854d0e', woodDark: '#29180d', parchment: '#fef08a' },
+    };
+
+    // ================================================================
+    // UTILITIES
+    // ================================================================
+    const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+    const shuffle = (items) => { const r = [...items]; for (let i = r.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [r[i], r[j]] = [r[j], r[i]]; } return r; };
+    const formatTime = (seconds) => { const c = Math.max(0, Math.floor(seconds)); const m = Math.floor(c / 60); const s = c % 60; return `${m}:${s.toString().padStart(2, '0')}`; };
+
+    function useIsMobile() {
+      const [isMobile, setIsMobile] = useState(() => {
+        if (typeof window === 'undefined') return false;
+        const ua = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        const touch = window.matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+        const small = window.innerWidth < 768;
+        return ua || touch || small;
+      });
+      useEffect(() => {
+        const handleResize = () => { setIsMobile(window.innerWidth < 768 || window.matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window || navigator.maxTouchPoints > 0); };
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+      }, []);
+      return isMobile;
+    }
+
+    // ================================================================
+    // AUDIO (procedural SFX + background music)
+    // ================================================================
+    class GameAudio {
+      constructor() {
+        this.ctx = null; this.master = null; this.sfxMaster = null; this.muted = false; this.volume = 0.6;
+        if (typeof window !== 'undefined') {
+          window.addEventListener('playground-mute', (e) => { this.setMuted(e.detail.muted); });
+        }
+      }
+      ensure() {
+        if (this.ctx) return this.ctx;
+        if (typeof window === 'undefined') return null;
+        const Ctor = window.AudioContext || window.webkitAudioContext;
+        if (!Ctor) return null;
+        this.ctx = new Ctor();
+        this.master = this.ctx.createGain();
+        this.sfxMaster = this.ctx.createGain();
+        this.master.gain.setValueAtTime(this.volume, this.ctx.currentTime);
+        this.sfxMaster.gain.setValueAtTime(this.muted ? 0 : 1, this.ctx.currentTime);
+        this.sfxMaster.connect(this.master);
+        this.master.connect(this.ctx.destination);
+        this.attachUnlock();
+        return this.ctx;
+      }
+      attachUnlock() {
+        if (typeof window === 'undefined') return;
+        const unlock = () => { this.ctx?.resume().catch(() => {}); window.removeEventListener('pointerdown', unlock); window.removeEventListener('keydown', unlock); window.removeEventListener('touchstart', unlock); };
+        window.addEventListener('pointerdown', unlock);
+        window.addEventListener('keydown', unlock);
+        window.addEventListener('touchstart', unlock);
+      }
+      resume() { const ctx = this.ensure(); if (ctx && ctx.state === 'suspended') ctx.resume().catch(() => {}); }
+      begin() {
+        const ctx = this.ensure(); const out = this.sfxMaster;
+        if (!ctx || !out || this.muted) return null;
+        if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+        return { ctx, out, now: ctx.currentTime };
+      }
+      setVolume(v) { this.volume = clamp(v, 0, 1); if (this.master && this.ctx && !this.muted) this.master.gain.setValueAtTime(this.volume, this.ctx.currentTime); }
+      toggleMute() { this.setMuted(!this.muted); return this.muted; }
+      setMuted(muted) { this.muted = muted; if (this.sfxMaster && this.ctx) this.sfxMaster.gain.setValueAtTime(muted ? 0 : 1, this.ctx.currentTime); }
+      getMuteState() { return this.muted; }
+      blip(b, at, o) {
+        const { ctx, out } = b;
+        const osc = ctx.createOscillator(); const g = ctx.createGain();
+        osc.type = o.type ?? 'square';
+        osc.frequency.setValueAtTime(o.freq, at);
+        if (o.freqTo !== undefined) {
+          if ((o.glide ?? 'exp') === 'lin') osc.frequency.linearRampToValueAtTime(o.freqTo, at + o.dur);
+          else osc.frequency.exponentialRampToValueAtTime(Math.max(1, o.freqTo), at + o.dur);
+        }
+        const peak = o.gain ?? 0.15;
+        g.gain.setValueAtTime(peak, at);
+        g.gain.exponentialRampToValueAtTime(0.0001, at + o.dur);
+        osc.connect(g); g.connect(out); osc.start(at); osc.stop(at + o.dur + 0.02);
+      }
+      noiseBurst(b, at, o) {
+        const { ctx, out } = b;
+        const len = Math.max(1, Math.floor(ctx.sampleRate * o.dur));
+        const buffer = ctx.createBuffer(1, len, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+        const src = ctx.createBufferSource(); src.buffer = buffer;
+        const filter = ctx.createBiquadFilter(); filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(o.from ?? 1000, at);
+        filter.frequency.exponentialRampToValueAtTime(Math.max(1, o.to ?? 80), at + o.dur);
+        const g = ctx.createGain(); g.gain.setValueAtTime(o.gain ?? 0.18, at); g.gain.exponentialRampToValueAtTime(0.0001, at + o.dur);
+        src.connect(filter); filter.connect(g); g.connect(out); src.start(at); src.stop(at + o.dur);
+      }
+      vary(amount = 0.05) { return 1 + (Math.random() * 2 - 1) * amount; }
+      playTone(o) { const b = this.begin(); if (!b) return; this.blip(b, b.now, { type: o.type, freq: o.freq, freqTo: o.freqTo, dur: o.dur ?? 0.15, gain: o.gain }); }
+      playCrispClick() { const b = this.begin(); if (!b) return; const v = this.vary(); this.blip(b, b.now, { type: 'sine', freq: 1200 * v, dur: 0.015, gain: 0.1 }); }
+      playPowerupChime() { const b = this.begin(); if (!b) return; const v = this.vary(); [523.25, 659.25, 783.99, 1046.50, 1318.51].forEach((freq, i) => { this.blip(b, b.now + i * 0.06, { type: 'sine', freq: freq * v, dur: 0.15, gain: 0.06 }); }); }
+      playFootstepWood() { const b = this.begin(); if (!b) return; const v = this.vary(); this.blip(b, b.now, { type: 'triangle', freq: 180 * v, freqTo: 60 * v, dur: 0.09, gain: 0.1 }); this.noiseBurst(b, b.now, { dur: 0.04, gain: 0.05, from: 800, to: 300 }); }
+      playErrorBuzz() { const b = this.begin(); if (!b) return; const v = this.vary(); this.blip(b, b.now, { type: 'sawtooth', freq: 150 * v, dur: 0.2, gain: 0.08 }); this.blip(b, b.now, { type: 'sawtooth', freq: 159 * v, dur: 0.2, gain: 0.08 }); }
+      playVictoryFanfare() { const b = this.begin(); if (!b) return; const v = this.vary(); const notes = [261.63, 329.63, 392.00, 523.25]; notes.forEach((freq, i) => { this.blip(b, b.now + i * 0.1, { type: 'sawtooth', freq: freq * v, dur: 0.4, gain: 0.06 }); this.blip(b, b.now + i * 0.1, { type: 'sine', freq: freq * v, dur: 0.4, gain: 0.04 }); }); const chordTime = notes.length * 0.1; notes.forEach((freq) => { this.blip(b, b.now + chordTime, { type: 'triangle', freq: freq * v, dur: 0.8, gain: 0.06 }); }); }
+      playDefeatMotif() { const b = this.begin(); if (!b) return; const v = this.vary(); const notes = [311.13, 261.63, 246.94, 196.00]; notes.forEach((freq, i) => { this.blip(b, b.now + i * 0.15, { type: 'sawtooth', freq: freq * v, dur: 0.3, gain: 0.08 }); this.blip(b, b.now + i * 0.15, { type: 'sine', freq: freq * 0.5 * v, dur: 0.35, gain: 0.06 }); }); }
+      playConfirmSelect() { const b = this.begin(); if (!b) return; const v = this.vary(); this.blip(b, b.now, { type: 'sine', freq: 523.25 * v, dur: 0.1, gain: 0.08 }); this.blip(b, b.now + 0.08, { type: 'sine', freq: 783.99 * v, dur: 0.15, gain: 0.1 }); }
+      playJumpLandingThud() { const b = this.begin(); if (!b) return; const v = this.vary(); this.blip(b, b.now, { type: 'sine', freq: 140 * v, freqTo: 35 * v, dur: 0.16, gain: 0.15 }); this.noiseBurst(b, b.now, { dur: 0.12, gain: 0.08, from: 300, to: 60 }); }
+    }
+    const gameAudio = new GameAudio();
+
+    // ================================================================
+    // BACKGROUND MUSIC COMPONENT (simplified for single-file)
+    // ================================================================
+    function BackgroundMusic({ url, isPlaying, isMuted = false, volume = 0.15 }) {
+      const audioRef = useRef(null);
+      const fallbackRef = useRef(null);
+      const [useFallback, setUseFallback] = useState(false);
+
+      useEffect(() => {
+        let cancelled = false;
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        if (!ctx) { setUseFallback(true); return; }
+
+        fetch(url, { mode: 'cors', credentials: 'omit' })
+          .then(res => { if (!res.ok) throw new Error('HTTP ' + res.status); return res.arrayBuffer(); })
+          .then(buf => ctx.decodeAudioData(buf))
+          .then(decoded => {
+            if (cancelled) return;
+            const source = ctx.createBufferSource();
+            source.buffer = decoded;
+            source.loop = true;
+            const gain = ctx.createGain();
+            gain.gain.value = isMuted ? 0 : volume;
+            source.connect(gain);
+            gain.connect(ctx.destination);
+            audioRef.current = { source, gain, ctx };
+            if (isPlaying) source.start(0);
+          })
+          .catch(() => { if (!cancelled) setUseFallback(true); });
+
+        return () => {
+          cancelled = true;
+          if (audioRef.current) {
+            try { audioRef.current.source.stop(); } catch (_) {}
+            try { audioRef.current.ctx.close(); } catch (_) {}
+            audioRef.current = null;
+          }
+        };
+      }, [url]);
+
+      useEffect(() => {
+        if (audioRef.current && audioRef.current.ctx.state === 'suspended') audioRef.current.ctx.resume().catch(() => {});
+        if (useFallback && fallbackRef.current) {
+          fallbackRef.current.muted = isMuted;
+          fallbackRef.current.volume = isMuted ? 0 : volume;
+          if (isPlaying) fallbackRef.current.play().catch(() => {}); else fallbackRef.current.pause();
+        }
+      }, [isPlaying, isMuted, volume, useFallback]);
+
+      if (useFallback) {
+        return React.createElement('audio', { ref: fallbackRef, src: url, loop: true, style: { display: 'none' } });
+      }
+      return null;
+    }
+
+    // ================================================================
+    // SCRIPTURE DATA
+    // ================================================================
+    const SCRIPTURE_DATA = [
+      { id: 'scripture_1', name: 'Surah Al-Falaq Scroll', roomName: 'Dining Hall Table', position: [11.5, 1.15, -6.5], rotation: [0, 0.4, 0] },
+      { id: 'scripture_2', name: 'Ayat al-Kursi Talisman', roomName: "Zamidar's Almirah", position: [-12.2, 1.3, -7.0], rotation: [0, -0.6, 0] },
+      { id: 'scripture_3', name: 'Surah An-Nas Scroll', roomName: 'Library Altar', position: [-10.8, 1.1, 8.5], rotation: [0, 1.2, 0] },
+      { id: 'scripture_4', name: 'Surah Al-Ikhlas Parchment', roomName: 'Courtyard Shrine', position: [0.0, 1.05, 0.0], rotation: [0, 0, 0] },
+      { id: 'scripture_5', name: 'Surah Al-Fatiha Relic', roomName: 'East Chamber Chest', position: [12.0, 1.1, 7.5], rotation: [0, -1.0, 0] },
+    ];
+
+    const JINN_WAYPOINTS = [
+      [0, 1.2, 0], [6, 1.2, 0], [11, 1.2, -6], [11, 1.2, 7], [0, 1.2, 7],
+      [-11, 1.2, 8], [-6, 1.2, 0], [-11, 1.2, -7], [0, 1.2, -8], [0, 1.2, 12],
+    ];
+
+    const _v1 = new THREE.Vector3();
+    const _v2 = new THREE.Vector3();
+    const _forward = new THREE.Vector3();
+    const _right = new THREE.Vector3();
+    const _camEuler = new THREE.Euler(0, 0, 0, 'YXZ');
+
+    // ================================================================
+    // MANSION ARCHITECTURE
+    // ================================================================
+    function MansionArchitecture({ gateUnlocked }) {
+      const woodColor = '#24140b';
+      const brickColor = '#3a2720';
+      const trimColor = '#1a0f08';
+      const stoneColor = '#1f2429';
+
+      return React.createElement('group', null,
+        // Floor
+        React.createElement('mesh', { rotation: [-Math.PI / 2, 0, 0], position: [0, 0, 0], receiveShadow: true },
+          React.createElement('planeGeometry', { args: [44, 44] }),
+          React.createElement('meshStandardMaterial', { color: stoneColor, roughness: 0.85, metalness: 0.1 })
+        ),
+        // Ceiling
+        React.createElement('mesh', { rotation: [Math.PI / 2, 0, 0], position: [0, 4.2, 0], receiveShadow: true },
+          React.createElement('planeGeometry', { args: [44, 44] }),
+          React.createElement('meshStandardMaterial', { color: '#14110e', roughness: 0.9 })
+        ),
+        // North Wall
+        React.createElement('mesh', { position: [0, 2.1, -18], castShadow: true, receiveShadow: true },
+          React.createElement('boxGeometry', { args: [40, 4.2, 0.8] }),
+          React.createElement('meshStandardMaterial', { color: brickColor, roughness: 0.9 })
+        ),
+        // South Wall left
+        React.createElement('mesh', { position: [-12, 2.1, 18], castShadow: true, receiveShadow: true },
+          React.createElement('boxGeometry', { args: [16, 4.2, 0.8] }),
+          React.createElement('meshStandardMaterial', { color: brickColor, roughness: 0.9 })
+        ),
+        // South Wall right
+        React.createElement('mesh', { position: [12, 2.1, 18], castShadow: true, receiveShadow: true },
+          React.createElement('boxGeometry', { args: [16, 4.2, 0.8] }),
+          React.createElement('meshStandardMaterial', { color: brickColor, roughness: 0.9 })
+        ),
+        // East Wall
+        React.createElement('mesh', { position: [18, 2.1, 0], castShadow: true, receiveShadow: true },
+          React.createElement('boxGeometry', { args: [0.8, 4.2, 36] }),
+          React.createElement('meshStandardMaterial', { color: brickColor, roughness: 0.9 })
+        ),
+        // West Wall
+        React.createElement('mesh', { position: [-18, 2.1, 0], castShadow: true, receiveShadow: true },
+          React.createElement('boxGeometry', { args: [0.8, 4.2, 36] }),
+          React.createElement('meshStandardMaterial', { color: brickColor, roughness: 0.9 })
+        ),
+        // West Wing Dividers
+        React.createElement('mesh', { position: [-6, 2.1, -10], castShadow: true, receiveShadow: true },
+          React.createElement('boxGeometry', { args: [0.6, 4.2, 16] }),
+          React.createElement('meshStandardMaterial', { color: woodColor, roughness: 0.8 })
+        ),
+        React.createElement('mesh', { position: [-6, 2.1, 10], castShadow: true, receiveShadow: true },
+          React.createElement('boxGeometry', { args: [0.6, 4.2, 16] }),
+          React.createElement('meshStandardMaterial', { color: woodColor, roughness: 0.8 })
+        ),
+        // East Wing Dividers
+        React.createElement('mesh', { position: [6, 2.1, -10], castShadow: true, receiveShadow: true },
+          React.createElement('boxGeometry', { args: [0.6, 4.2, 16] }),
+          React.createElement('meshStandardMaterial', { color: woodColor, roughness: 0.8 })
+        ),
+        React.createElement('mesh', { position: [6, 2.1, 10], castShadow: true, receiveShadow: true },
+          React.createElement('boxGeometry', { args: [0.6, 4.2, 16] }),
+          React.createElement('meshStandardMaterial', { color: woodColor, roughness: 0.8 })
+        ),
+        // Horizontal Partitions
+        React.createElement('mesh', { position: [-12, 2.1, 0], castShadow: true, receiveShadow: true },
+          React.createElement('boxGeometry', { args: [12, 4.2, 0.6] }),
+          React.createElement('meshStandardMaterial', { color: woodColor, roughness: 0.8 })
+        ),
+        React.createElement('mesh', { position: [12, 2.1, 0], castShadow: true, receiveShadow: true },
+          React.createElement('boxGeometry', { args: [12, 4.2, 0.6] }),
+          React.createElement('meshStandardMaterial', { color: woodColor, roughness: 0.8 })
+        ),
+        // Pillars
+        ...[-5, 5].flatMap(x => [-5, 5].map(z =>
+          React.createElement('group', { key: `pillar_${x}_${z}`, position: [x, 0, z] },
+            React.createElement('mesh', { position: [0, 2.1, 0], castShadow: true, receiveShadow: true },
+              React.createElement('cylinderGeometry', { args: [0.45, 0.55, 4.2, 12] }),
+              React.createElement('meshStandardMaterial', { color: '#4a2e1b', roughness: 0.8 })
+            ),
+            React.createElement('mesh', { position: [0, 4.0, 0], castShadow: true },
+              React.createElement('boxGeometry', { args: [1.2, 0.3, 1.2] }),
+              React.createElement('meshStandardMaterial', { color: trimColor, roughness: 0.7 })
+            ),
+            React.createElement('mesh', { position: [0, 0.15, 0], receiveShadow: true },
+              React.createElement('boxGeometry', { args: [1.3, 0.3, 1.3] }),
+              React.createElement('meshStandardMaterial', { color: trimColor, roughness: 0.7 })
+            )
+          )
+        )),
+        // Center Altar
+        React.createElement('group', { position: [0, 0, 0] },
+          React.createElement('mesh', { position: [0, 0.25, 0], receiveShadow: true },
+            React.createElement('cylinderGeometry', { args: [2.5, 2.8, 0.5, 16] }),
+            React.createElement('meshStandardMaterial', { color: '#2d211a', roughness: 0.9 })
+          ),
+          React.createElement('mesh', { position: [0, 0.6, 0], receiveShadow: true },
+            React.createElement('cylinderGeometry', { args: [1.8, 2.0, 0.3, 16] }),
+            React.createElement('meshStandardMaterial', { color: '#3d2c22', roughness: 0.85 })
+          ),
+          React.createElement('mesh', { position: [0, 0.85, 0], castShadow: true, receiveShadow: true },
+            React.createElement('boxGeometry', { args: [0.9, 0.4, 0.9] }),
+            React.createElement('meshStandardMaterial', { color: '#1a110a', roughness: 0.6 })
+          )
+        ),
+        // Dining Hall Table
+        React.createElement('group', { position: [11.5, 0, -6.5] },
+          React.createElement('mesh', { position: [0, 0.8, 0], castShadow: true, receiveShadow: true },
+            React.createElement('boxGeometry', { args: [2.2, 0.15, 6.5] }),
+            React.createElement('meshStandardMaterial', { color: '#2c1a0e', roughness: 0.6 })
+          ),
+          ...[-0.9, 0.9].flatMap(lx => [-2.8, 2.8].map(lz =>
+            React.createElement('mesh', { key: `tl_${lx}_${lz}`, position: [lx, 0.4, lz], castShadow: true },
+              React.createElement('cylinderGeometry', { args: [0.08, 0.08, 0.8, 8] }),
+              React.createElement('meshStandardMaterial', { color: '#1a0f07', roughness: 0.7 })
+            )
+          )),
+          ...[-1.6, 1.6].flatMap((cx, i) => [-2, 0, 2].map((cz, j) =>
+            React.createElement('group', { key: `chair_${i}_${j}`, position: [cx, 0, cz], rotation: [0, cx < 0 ? Math.PI / 2 : -Math.PI / 2, 0] },
+              React.createElement('mesh', { position: [0, 0.45, 0], castShadow: true },
+                React.createElement('boxGeometry', { args: [0.6, 0.08, 0.6] }),
+                React.createElement('meshStandardMaterial', { color: '#3a1e0f', roughness: 0.7 })
+              ),
+              React.createElement('mesh', { position: [0, 0.85, -0.26], castShadow: true },
+                React.createElement('boxGeometry', { args: [0.55, 0.8, 0.08] }),
+                React.createElement('meshStandardMaterial', { color: '#2a150a', roughness: 0.7 })
+              )
+            )
+          ))
+        ),
+        // Bedchamber
+        React.createElement('group', { position: [-12, 0, -7.0] },
+          React.createElement('mesh', { position: [0, 0.5, 0], castShadow: true, receiveShadow: true },
+            React.createElement('boxGeometry', { args: [4.2, 0.6, 4.8] }),
+            React.createElement('meshStandardMaterial', { color: '#1f120a', roughness: 0.7 })
+          ),
+          React.createElement('mesh', { position: [0, 0.9, 0], castShadow: true },
+            React.createElement('boxGeometry', { args: [3.8, 0.35, 4.4] }),
+            React.createElement('meshStandardMaterial', { color: '#4a0e17', roughness: 0.8 })
+          ),
+          ...[-1.9, 1.9].flatMap(bx => [-2.2, 2.2].map(bz =>
+            React.createElement('mesh', { key: `bp_${bx}_${bz}`, position: [bx, 1.8, bz], castShadow: true },
+              React.createElement('cylinderGeometry', { args: [0.08, 0.1, 3.6, 8] }),
+              React.createElement('meshStandardMaterial', { color: '#160c06', roughness: 0.6 })
+            )
+          )),
+          React.createElement('group', { position: [-0.2, 0, 4.8] },
+            React.createElement('mesh', { position: [0, 1.6, 0], castShadow: true, receiveShadow: true },
+              React.createElement('boxGeometry', { args: [3.0, 3.2, 1.2] }),
+              React.createElement('meshStandardMaterial', { color: '#2b180d', roughness: 0.6 })
+            ),
+            React.createElement('mesh', { position: [-0.7, 1.6, 0.62], castShadow: true },
+              React.createElement('boxGeometry', { args: [1.3, 2.8, 0.06] }),
+              React.createElement('meshStandardMaterial', { color: '#3d2213', roughness: 0.5 })
+            ),
+            React.createElement('mesh', { position: [0.7, 1.6, 0.62], castShadow: true },
+              React.createElement('boxGeometry', { args: [1.3, 2.8, 0.06] }),
+              React.createElement('meshStandardMaterial', { color: '#3d2213', roughness: 0.5 })
+            ),
+            React.createElement('mesh', { position: [-0.15, 1.6, 0.68] },
+              React.createElement('sphereGeometry', { args: [0.06, 8, 8] }),
+              React.createElement('meshStandardMaterial', { color: '#d4af37', metalness: 0.9, roughness: 0.2 })
+            ),
+            React.createElement('mesh', { position: [0.15, 1.6, 0.68] },
+              React.createElement('sphereGeometry', { args: [0.06, 8, 8] }),
+              React.createElement('meshStandardMaterial', { color: '#d4af37', metalness: 0.9, roughness: 0.2 })
+            )
+          )
+        ),
+        // Library
+        React.createElement('group', { position: [-11, 0, 8.5] },
+          React.createElement('mesh', { position: [-5.8, 1.8, 0], castShadow: true, receiveShadow: true },
+            React.createElement('boxGeometry', { args: [1.0, 3.6, 6.0] }),
+            React.createElement('meshStandardMaterial', { color: '#1e110a', roughness: 0.8 })
+          ),
+          React.createElement('mesh', { position: [0.2, 0.6, 0], castShadow: true, receiveShadow: true },
+            React.createElement('boxGeometry', { args: [2.4, 1.2, 1.6] }),
+            React.createElement('meshStandardMaterial', { color: '#2d190e', roughness: 0.6 })
+          )
+        ),
+        // East Chamber Chest
+        React.createElement('group', { position: [12, 0, 7.5] },
+          React.createElement('group', { position: [0, 0, 0] },
+            React.createElement('mesh', { position: [0, 0.45, 0], castShadow: true, receiveShadow: true },
+              React.createElement('boxGeometry', { args: [1.8, 0.9, 1.2] }),
+              React.createElement('meshStandardMaterial', { color: '#351d10', roughness: 0.65 })
+            ),
+            React.createElement('mesh', { position: [0, 0.45, 0] },
+              React.createElement('boxGeometry', { args: [1.82, 0.92, 0.15] }),
+              React.createElement('meshStandardMaterial', { color: '#d4af37', metalness: 0.85, roughness: 0.3 })
+            )
+          )
+        ),
+        // Lanterns
+        ...[
+          [-5, 2.5, -9], [5, 2.5, -9], [-5, 2.5, 9], [5, 2.5, 9], [0, 2.5, -16], [0, 2.5, 14]
+        ].map(([lx, ly, lz], i) =>
+          React.createElement('group', { key: `lantern_${i}`, position: [lx, ly, lz] },
+            React.createElement('mesh', { castShadow: true },
+              React.createElement('cylinderGeometry', { args: [0.15, 0.1, 0.4, 8] }),
+              React.createElement('meshStandardMaterial', { color: '#111', metalness: 0.9, roughness: 0.2 })
+            ),
+            React.createElement('pointLight', { color: '#ff9933', intensity: 8.0, distance: 7.5, decay: 2 })
+          )
+        ),
+        // Escape Gate
+        React.createElement('group', { position: [0, 0, 17.6] },
+          React.createElement('mesh', { position: [-3.2, 2.1, 0], castShadow: true },
+            React.createElement('boxGeometry', { args: [0.5, 4.2, 0.5] }),
+            React.createElement('meshStandardMaterial', { color: '#181818', metalness: 0.9, roughness: 0.3 })
+          ),
+          React.createElement('mesh', { position: [3.2, 2.1, 0], castShadow: true },
+            React.createElement('boxGeometry', { args: [0.5, 4.2, 0.5] }),
+            React.createElement('meshStandardMaterial', { color: '#181818', metalness: 0.9, roughness: 0.3 })
+          ),
+          React.createElement('mesh', { position: [0, 3.9, 0], castShadow: true },
+            React.createElement('boxGeometry', { args: [6.8, 0.4, 0.5] }),
+            React.createElement('meshStandardMaterial', { color: '#181818', metalness: 0.9, roughness: 0.3 })
+          ),
+          ...[-2.4, -1.6, -0.8, 0, 0.8, 1.6, 2.4].map(gx =>
+            React.createElement('mesh', { key: `bar_${gx}`, position: [gx, 2.0, 0], castShadow: true },
+              React.createElement('cylinderGeometry', { args: [0.05, 0.05, 3.8, 8] }),
+              React.createElement('meshStandardMaterial', { color: '#222', metalness: 0.9, roughness: 0.3 })
+            )
+          ),
+          React.createElement('mesh', { position: [0, 2.0, 0] },
+            React.createElement('planeGeometry', { args: [6.0, 3.8] }),
+            React.createElement('meshStandardMaterial', {
+              color: gateUnlocked ? '#eab308' : '#dc2626',
+              emissive: gateUnlocked ? '#eab308' : '#b91c1c',
+              emissiveIntensity: gateUnlocked ? 2.5 : 1.2,
+              transparent: true,
+              opacity: gateUnlocked ? 0.35 : 0.75,
+            })
+          ),
+          React.createElement('pointLight', { color: gateUnlocked ? '#facc15' : '#ef4444', intensity: gateUnlocked ? 35 : 18, distance: 10, decay: 1.8 })
+        )
+      );
+    }
+
+    // ================================================================
+    // SCRIPTURE ENTITY
+    // ================================================================
+    function ScriptureEntity({ item, isCollected }) {
+      const meshRef = useRef(null);
+      useFrame(({ clock }) => {
+        if (isCollected || !meshRef.current) return;
+        const t = clock.getElapsedTime() + item.position[0];
+        meshRef.current.position.y = item.position[1] + Math.sin(t * 2.5) * 0.08;
+        meshRef.current.rotation.y += 0.02;
+      });
+      if (isCollected) return null;
+      return React.createElement('group', { ref: meshRef, position: item.position, rotation: item.rotation },
+        React.createElement('mesh', { castShadow: true },
+          React.createElement('cylinderGeometry', { args: [0.08, 0.08, 0.45, 12] }),
+          React.createElement('meshStandardMaterial', { color: '#fef08a', emissive: '#eab308', emissiveIntensity: 1.2, roughness: 0.4 })
+        ),
+        React.createElement('mesh', { position: [0, 0.23, 0] },
+          React.createElement('cylinderGeometry', { args: [0.11, 0.11, 0.06, 12] }),
+          React.createElement('meshStandardMaterial', { color: '#ca8a04', metalness: 0.8, roughness: 0.2 })
+        ),
+        React.createElement('mesh', { position: [0, -0.23, 0] },
+          React.createElement('cylinderGeometry', { args: [0.11, 0.11, 0.06, 12] }),
+          React.createElement('meshStandardMaterial', { color: '#ca8a04', metalness: 0.8, roughness: 0.2 })
+        ),
+        React.createElement('pointLight', { color: '#fde047', intensity: 15, distance: 4.5, decay: 2 })
+      );
+    }
+
+    // ================================================================
+    // JINN MODEL
+    // ================================================================
+    function JinnModel({ jinnPosRef, isHunting }) {
+      const groupRef = useRef(null);
+      const leftEyeRef = useRef(null);
+      const rightEyeRef = useRef(null);
+      const cloakRef = useRef(null);
+
+      useFrame(({ clock }) => {
+        if (!groupRef.current) return;
+        const t = clock.getElapsedTime();
+        groupRef.current.position.copy(jinnPosRef.current);
+        groupRef.current.position.y = jinnPosRef.current.y + Math.sin(t * 3) * 0.15;
+        if (cloakRef.current) {
+          cloakRef.current.rotation.z = Math.sin(t * 2) * 0.08;
+          cloakRef.current.rotation.x = (isHunting ? 0.25 : 0.05) + Math.sin(t * 4) * 0.05;
+        }
+        const eyeIntensity = isHunting ? 3.5 + Math.sin(t * 15) * 1.5 : 1.8 + Math.sin(t * 4) * 0.5;
+        if (leftEyeRef.current) leftEyeRef.current.material.emissiveIntensity = eyeIntensity;
+        if (rightEyeRef.current) rightEyeRef.current.material.emissiveIntensity = eyeIntensity;
+      });
+
+      return React.createElement('group', { ref: groupRef },
+        React.createElement('mesh', { position: [0, 2.3, 0], castShadow: true },
+          React.createElement('sphereGeometry', { args: [0.35, 16, 16] }),
+          React.createElement('meshStandardMaterial', { color: '#090a0f', roughness: 0.9, metalness: 0.1 })
+        ),
+        React.createElement('mesh', { position: [-0.22, 2.65, 0], rotation: [0, 0, 0.4] },
+          React.createElement('coneGeometry', { args: [0.1, 0.5, 8] }),
+          React.createElement('meshStandardMaterial', { color: '#050608', roughness: 0.9 })
+        ),
+        React.createElement('mesh', { position: [0.22, 2.65, 0], rotation: [0, 0, -0.4] },
+          React.createElement('coneGeometry', { args: [0.1, 0.5, 8] }),
+          React.createElement('meshStandardMaterial', { color: '#050608', roughness: 0.9 })
+        ),
+        React.createElement('mesh', { ref: leftEyeRef, position: [-0.12, 2.35, -0.3] },
+          React.createElement('sphereGeometry', { args: [0.06, 8, 8] }),
+          React.createElement('meshStandardMaterial', { color: '#ff0000', emissive: '#ff0000', emissiveIntensity: 2.5 })
+        ),
+        React.createElement('mesh', { ref: rightEyeRef, position: [0.12, 2.35, -0.3] },
+          React.createElement('sphereGeometry', { args: [0.06, 8, 8] }),
+          React.createElement('meshStandardMaterial', { color: '#ff0000', emissive: '#ff0000', emissiveIntensity: 2.5 })
+        ),
+        React.createElement('group', { ref: cloakRef, position: [0, 1.4, 0] },
+          React.createElement('mesh', { castShadow: true },
+            React.createElement('cylinderGeometry', { args: [0.4, 0.85, 1.8, 16, 1, true] }),
+            React.createElement('meshStandardMaterial', { color: '#090a10', roughness: 0.95, transparent: true, opacity: 0.92, side: THREE.DoubleSide })
+          ),
+          React.createElement('mesh', { position: [0, -1.1, 0] },
+            React.createElement('coneGeometry', { args: [0.6, 1.2, 12] }),
+            React.createElement('meshStandardMaterial', { color: '#050608', transparent: true, opacity: 0.75 })
+          )
+        ),
+        React.createElement('pointLight', { color: isHunting ? '#ff1111' : '#880000', intensity: isHunting ? 25 : 8, distance: 9, decay: 2 })
+      );
+    }
+
+    // ================================================================
+    // FIRST PERSON INVESTIGATOR
+    // ================================================================
+    function FirstPersonInvestigator({ gameState, setGameState, inputRef, onCollectScripture, onUpdateHUD, collectedIds, jinnPosRef, isHuntingRef, gateUnlocked }) {
+      const { camera, gl } = useThree();
+      const playerPos = useRef(new THREE.Vector3(0, 1.7, 14));
+      const flashlightSpotRef = useRef(null);
+      const flashlightMeshRef = useRef(null);
+      const playerYaw = useRef(Math.PI);
+      const playerPitch = useRef(0);
+      const staminaRef = useRef(getConfig('maxStamina'));
+      const batteryRef = useRef(100);
+      const fearRef = useRef(0);
+      const flashlightOnRef = useRef(true);
+      const wasInteracting = useRef(false);
+      const wasFlashlightToggle = useRef(false);
+      const lastFootstepTime = useRef(0);
+      const lastWhisperTime = useRef(0);
+      const isPointerLocked = useRef(false);
+
+      useEffect(() => {
+        const canvas = gl.domElement;
+        const handlePointerLockChange = () => { isPointerLocked.current = document.pointerLockElement === canvas; };
+        const handleCanvasClick = () => { if (gameState.status === 'PLAYING' && !isPointerLocked.current) canvas.requestPointerLock?.(); };
+        const handleMouseMove = (e) => {
+          if (!isPointerLocked.current || gameState.status !== 'PLAYING') return;
+          playerYaw.current -= e.movementX * 0.0022;
+          playerPitch.current -= e.movementY * 0.0022;
+          playerPitch.current = clamp(playerPitch.current, -Math.PI / 2.3, Math.PI / 2.3);
+        };
+        document.addEventListener('pointerlockchange', handlePointerLockChange);
+        canvas.addEventListener('click', handleCanvasClick);
+        window.addEventListener('mousemove', handleMouseMove);
+        return () => {
+          document.removeEventListener('pointerlockchange', handlePointerLockChange);
+          canvas.removeEventListener('click', handleCanvasClick);
+          window.removeEventListener('mousemove', handleMouseMove);
+        };
+      }, [gl, gameState.status]);
+
+      useFrame(({ clock }, delta) => {
+        if (gameState.status !== 'PLAYING') return;
+        const dt = Math.min(delta, 0.1);
+        const actions = inputRef.current?.actions;
+        const now = clock.getElapsedTime();
+
+        const interactPressed = actions?.confirm || inputRef.current?.customInteract;
+        const flashlightPressed = inputRef.current?.customFlashlight;
+        const isSprinting = inputRef.current?.customSprint && staminaRef.current > 10;
+
+        if (flashlightPressed && !wasFlashlightToggle.current) {
+          flashlightOnRef.current = !flashlightOnRef.current;
+          gameAudio.playJumpLandingThud();
+        }
+        wasFlashlightToggle.current = !!flashlightPressed;
+
+        const walkSpeed = getConfig('walkSpeed');
+        const sprintSpeed = getConfig('sprintSpeed');
+        let currentSpeed = walkSpeed;
+
+        if (isSprinting) {
+          currentSpeed = sprintSpeed;
+          staminaRef.current = Math.max(0, staminaRef.current - dt * 28);
+        } else {
+          staminaRef.current = Math.min(getConfig('maxStamina'), staminaRef.current + dt * 16);
+        }
+
+        if (flashlightOnRef.current) {
+          batteryRef.current = Math.max(0, batteryRef.current - dt * getConfig('flashlightBatteryDrain'));
+          if (batteryRef.current <= 0) flashlightOnRef.current = false;
+        } else {
+          batteryRef.current = Math.min(100, batteryRef.current + dt * 4.0);
+        }
+
+        if (!isPointerLocked.current && inputRef.current?.touchLookDelta) {
+          const td = inputRef.current.touchLookDelta;
+          playerYaw.current -= td.x * 0.004;
+          playerPitch.current -= td.y * 0.004;
+          playerPitch.current = clamp(playerPitch.current, -Math.PI / 2.3, Math.PI / 2.3);
+          inputRef.current.touchLookDelta = { x: 0, y: 0 };
+        }
+
+        _camEuler.set(playerPitch.current, playerYaw.current, 0);
+        camera.quaternion.setFromEuler(_camEuler);
+        _forward.set(0, 0, -1).applyEuler(new THREE.Euler(0, playerYaw.current, 0));
+        _right.set(1, 0, 0).applyEuler(new THREE.Euler(0, playerYaw.current, 0));
+
+        _v1.set(0, 0, 0);
+        if (actions?.up) _v1.add(_forward);
+        if (actions?.down) _v1.sub(_forward);
+        if (actions?.right) _v1.add(_right);
+        if (actions?.left) _v1.sub(_right);
+
+        const isMoving = _v1.lengthSq() > 0.001;
+        if (isMoving) {
+          _v1.normalize();
+          const nextX = playerPos.current.x + _v1.x * currentSpeed * dt;
+          const nextZ = playerPos.current.z + _v1.z * currentSpeed * dt;
+          playerPos.current.x = clamp(nextX, -16.5, 16.5);
+          playerPos.current.z = clamp(nextZ, -16.5, 16.5);
+          const footstepInterval = isSprinting ? 0.32 : 0.52;
+          if (now - lastFootstepTime.current > footstepInterval) {
+            gameAudio.playFootstepWood();
+            lastFootstepTime.current = now;
+          }
+        }
+
+        const bob = isMoving ? Math.sin(now * (isSprinting ? 14 : 9)) * 0.05 : 0;
+        camera.position.set(playerPos.current.x, playerPos.current.y + bob, playerPos.current.z);
+
+        const distToJinn = playerPos.current.distanceTo(jinnPosRef.current);
+        const maxFear = getConfig('maxFear');
+
+        if (distToJinn < 14) {
+          const proximityFactor = Math.max(0, 1 - distToJinn / 14);
+          fearRef.current = Math.min(maxFear, fearRef.current + proximityFactor * dt * 26);
+          if (now - lastWhisperTime.current > 2.8 - proximityFactor * 1.5) {
+            gameAudio.playErrorBuzz();
+            lastWhisperTime.current = now;
+          }
+          if (distToJinn < 1.6 || fearRef.current >= maxFear) {
+            gameAudio.playDefeatMotif();
+            setGameState((prev) => ({ ...prev, status: 'GAME_OVER', score: collectedIds.length * 200 }));
+            return;
+          }
+        } else {
+          fearRef.current = Math.max(0, fearRef.current - dt * 6.0);
+        }
+
+        if (flashlightSpotRef.current) {
+          camera.getWorldDirection(_v2);
+          flashlightSpotRef.current.position.copy(camera.position);
+          flashlightSpotRef.current.target.position.copy(camera.position).addScaledVector(_v2, 10);
+          flashlightSpotRef.current.target.updateMatrixWorld();
+          let flickerMultiplier = 1.0;
+          if (distToJinn < 12) flickerMultiplier = Math.random() > 0.4 ? (Math.random() > 0.7 ? 0.1 : 0.4) : 1.0;
+          flashlightSpotRef.current.intensity = flashlightOnRef.current ? 35.0 * (batteryRef.current / 100) * flickerMultiplier : 0;
+        }
+
+        if (flashlightMeshRef.current) {
+          flashlightMeshRef.current.position.copy(camera.position).addScaledVector(_forward, 0.55).addScaledVector(_right, 0.3).add(new THREE.Vector3(0, -0.25, 0));
+          flashlightMeshRef.current.quaternion.copy(camera.quaternion);
+        }
+
+        let promptText = null;
+        for (const scripture of SCRIPTURE_DATA) {
+          if (collectedIds.includes(scripture.id)) continue;
+          _v1.set(...scripture.position);
+          if (playerPos.current.distanceTo(_v1) < 2.4) {
+            promptText = `[E / TAP] Collect ${scripture.name}`;
+            if (interactPressed && !wasInteracting.current) {
+              gameAudio.playPowerupChime();
+              onCollectScripture(scripture.id);
+              fearRef.current = Math.max(0, fearRef.current - 40);
+            }
+            break;
+          }
+        }
+
+        if (gateUnlocked) {
+          _v1.set(0, 1.7, 17.0);
+          const distToGate = playerPos.current.distanceTo(_v1);
+          if (distToGate < 3.2) {
+            promptText = 'ENTER THE GATE TO ESCAPE!';
+            if (distToGate < 1.8) {
+              gameAudio.playVictoryFanfare();
+              setGameState((prev) => ({ ...prev, status: 'VICTORY', score: 1000 + Math.floor((100 - fearRef.current) * 10) }));
+              return;
+            }
+          }
+        } else {
+          _v1.set(0, 1.7, 17.0);
+          if (playerPos.current.distanceTo(_v1) < 3.0) {
+            promptText = `Gate Sealed by Jinn! (${collectedIds.length}/${SCRIPTURE_DATA.length} Scriptures Found)`;
+          }
+        }
+
+        wasInteracting.current = !!interactPressed;
+
+        onUpdateHUD({
+          stamina: staminaRef.current,
+          battery: batteryRef.current,
+          fear: fearRef.current,
+          flashlightOn: flashlightOnRef.current,
+          nearPrompt: promptText,
+          jinnDistance: distToJinn,
+        });
+      });
+
+      return React.createElement(React.Fragment, null,
+        React.createElement('spotLight', {
+          ref: flashlightSpotRef,
+          color: '#fff5e6',
+          angle: Math.PI / 4.2,
+          penumbra: 0.4,
+          distance: 24,
+          decay: 1.8,
+          castShadow: true,
+          'shadow-mapSize': [1024, 1024],
+          'shadow-bias': -0.0002,
+        }),
+        React.createElement('group', { ref: flashlightMeshRef },
+          React.createElement('mesh', { position: [0, 0, 0], rotation: [Math.PI / 2, 0, 0] },
+            React.createElement('cylinderGeometry', { args: [0.04, 0.045, 0.28, 12] }),
+            React.createElement('meshStandardMaterial', { color: '#2a2a2a', metalness: 0.8, roughness: 0.3 })
+          ),
+          React.createElement('mesh', { position: [0, 0, -0.15], rotation: [Math.PI / 2, 0, 0] },
+            React.createElement('cylinderGeometry', { args: [0.07, 0.045, 0.08, 12] }),
+            React.createElement('meshStandardMaterial', { color: '#1a1a1a', metalness: 0.9, roughness: 0.2 })
+          ),
+          React.createElement('mesh', { position: [0, 0, -0.19] },
+            React.createElement('sphereGeometry', { args: [0.05, 12, 12] }),
+            React.createElement('meshStandardMaterial', {
+              color: flashlightOnRef.current ? '#ffffdd' : '#555555',
+              emissive: flashlightOnRef.current ? '#ffffee' : '#000000',
+              emissiveIntensity: flashlightOnRef.current ? 3.0 : 0,
+            })
+          )
+        )
+      );
+    }
+
+    // ================================================================
+    // SCENE
+    // ================================================================
+    function Scene({ gameState, setGameState, inputRef, exitChat, gameStateRef, onCollectScripture, onUpdateHUD, collectedIds, isTouchDevice }) {
+      const { camera } = useThree();
+      const jinnPosRef = useRef(new THREE.Vector3(0, 1.2, -6));
+      const jinnWaypointIndex = useRef(0);
+      const isHuntingRef = useRef(false);
+      const [isHuntingVisual, setIsHuntingVisual] = useState(false);
+      const gateUnlocked = collectedIds.length >= getConfig('totalScriptures');
+
+      useFrame(({ clock }, delta) => {
+        if (gameState.status !== 'PLAYING') return;
+        const dt = Math.min(delta, 0.1);
+        const jinnSpeed = isHuntingRef.current ? getConfig('jinnHuntSpeed') : getConfig('jinnSpeed');
+        const distToPlayer = jinnPosRef.current.distanceTo(camera.position);
+
+        if (distToPlayer < 9.0) {
+          if (!isHuntingRef.current) { isHuntingRef.current = true; setIsHuntingVisual(true); }
+        } else if (distToPlayer > 18.0 && isHuntingRef.current) {
+          isHuntingRef.current = false; setIsHuntingVisual(false);
+        }
+
+        if (isHuntingRef.current) {
+          _v1.copy(camera.position).sub(jinnPosRef.current);
+          _v1.y = 0;
+          if (_v1.lengthSq() > 0.1) { _v1.normalize(); jinnPosRef.current.addScaledVector(_v1, jinnSpeed * dt); }
+        } else {
+          const targetWp = JINN_WAYPOINTS[jinnWaypointIndex.current];
+          _v1.set(targetWp[0], targetWp[1], targetWp[2]);
+          if (jinnPosRef.current.distanceTo(_v1) < 1.2) {
+            jinnWaypointIndex.current = (jinnWaypointIndex.current + 1) % JINN_WAYPOINTS.length;
+          } else {
+            _v2.copy(_v1).sub(jinnPosRef.current);
+            _v2.y = 0;
+            _v2.normalize();
+            jinnPosRef.current.addScaledVector(_v2, jinnSpeed * dt);
+          }
+        }
+      });
+
+      return React.createElement(React.Fragment, null,
+        React.createElement('directionalLight', {
+          position: [10, 20, 10],
+          intensity: getConfig('sunIntensity'),
+          color: getConfig('sunColor'),
+          castShadow: true,
+          'shadow-mapSize': [2048, 2048],
+          'shadow-camera-near': 0.5,
+          'shadow-camera-far': 60,
+          'shadow-camera-left': -22,
+          'shadow-camera-right': 22,
+          'shadow-camera-top': 22,
+          'shadow-camera-bottom': -22,
+          'shadow-bias': -0.0005,
+        }),
+        React.createElement('ambientLight', { color: getConfig('ambientColor'), intensity: getConfig('ambientIntensity') }),
+        React.createElement('hemisphereLight', {
+          color: getConfig('hemiSkyColor'),
+          groundColor: getConfig('hemiGroundColor'),
+          intensity: getConfig('hemiIntensity'),
+        }),
+        React.createElement(MansionArchitecture, { gateUnlocked }),
+        ...SCRIPTURE_DATA.map((item) =>
+          React.createElement(ScriptureEntity, { key: item.id, item, isCollected: collectedIds.includes(item.id) })
+        ),
+        React.createElement(JinnModel, { jinnPosRef, isHunting: isHuntingVisual }),
+        React.createElement(FirstPersonInvestigator, {
+          gameState, setGameState, inputRef,
+          onCollectScripture, onUpdateHUD, collectedIds,
+          jinnPosRef, isHuntingRef, gateUnlocked,
+        })
+      );
+    }
+
+    // ================================================================
+    // GAME WRAPPER
+    // ================================================================
+    function Game({ gameState, setGameState, exitChat, gameStateRef, onCollectScripture, onUpdateHUD, collectedIds, isTouchDevice, inputRef }) {
+      return React.createElement('div', { className: 'w-full h-full canvas-wrapper relative' },
+        React.createElement(Canvas, {
+          shadows: true,
+          dpr: [1, 2],
+          camera: { fov: getConfig('fov'), near: 0.1, far: 100, position: [0, 1.7, 14] },
+          gl: { antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.1 },
+          scene: { background: new THREE.Color(getConfig('backgroundColor')), fog: new THREE.FogExp2(getConfig('backgroundColor'), 0.045) },
+        },
+          React.createElement(Suspense, { fallback: null },
+            React.createElement(Scene, {
+              gameState, setGameState, inputRef, exitChat, gameStateRef,
+              onCollectScripture, onUpdateHUD, collectedIds, isTouchDevice,
+            }),
+            React.createElement(EffectComposer, null,
+              React.createElement(Bloom, { luminanceThreshold: 0.8, luminanceSmoothing: 0.7, intensity: 0.6, mipmapBlur: true }),
+              React.createElement(Vignette, { eskil: false, offset: 0.15, darkness: 1.1 })
+            )
+          )
+        )
+      );
+    }
+
+    // ================================================================
+    // UI COMPONENTS (MenuOverlay)
+    // ================================================================
+    const TONE_CLASS = { neutral: 'bg-black/70', danger: 'bg-red-900/80', victory: 'bg-emerald-900/80' };
+    const BUTTON_CLASS = { neutral: 'hover:bg-yellow-400', danger: 'hover:bg-red-400', victory: 'hover:bg-emerald-400' };
+
+    function MenuOverlay({ children, tone = 'neutral', zIndex = 40 }) {
+      return React.createElement('div', {
+        className: `absolute inset-0 ${TONE_CLASS[tone]} overflow-y-auto touch-auto`,
+        style: { zIndex },
+      },
+        React.createElement('div', { className: 'min-h-full flex flex-col items-center p-4' },
+          React.createElement('div', { className: 'm-auto w-full max-w-md flex flex-col items-center' }, children)
+        )
+      );
+    }
+
+    // ================================================================
+    // TRANSLATIONS
+    // ================================================================
+    const TRANSLATIONS = {
+      en: {
+        genreBadge: 'Bengali Survival Horror', title: 'ZAMIDAR HAUNT',
+        story: 'You have entered the dark, abandoned Zamidar Bari. A shadowy, terrifying Jinn roams the decaying corridors. Find the 5 sacred protective scriptures hidden in ancient chests and altars to break the curse and escape!',
+        developedBy: 'Developed by Imaan Interactive', enterMansion: 'ENTER THE MANSION',
+        howToPlay: 'HOW TO PLAY & LORE', langToggle: 'বাংলা (BN)', scriptures: 'SCRIPTURES',
+        fear: 'Fear', battery: 'Battery', stamina: 'Stamina', menu: 'Menu', run: 'Run',
+        torch: 'Torch', collect: 'Collect', gameMenuTitle: 'GAME MENU',
+        resume: 'RESUME INVESTIGATION', sfx: 'SFX', music: 'MUSIC',
+        restart: 'RESTART MANSION RUN', quit: 'QUIT TO TITLE SCREEN',
+        guideTitle: 'SURVIVAL HORROR GUIDE', missionTitle: '🎯 MISSION OBJECTIVE',
+        missionDesc: 'Search the 5 mansion wings (Dining Hall, Zamidar Bedchamber, Library, East Chamber, Courtyard) to collect all 5 sacred protective scriptures. Once gathered, rush to the South Wrought-Iron Gate to escape!',
+        jinnTitle: '👻 THE ROAMING JINN',
+        jinnDesc: 'A malevolent entity roams the dark corridors. When it draws near, your flashlight flickers violently, whispers echo, and your fear level surges. If it catches you or your fear hits 100%, you will perish!',
+        flashlightTitle: '🔦 FLASHLIGHT & STAMINA',
+        flashlightDesc: 'Keep your flashlight powered to navigate shadowy rooms. Switch it off briefly when safe to recharge. Sprinting consumes stamina—save it for escaping when the Jinn hunts!',
+        controlsTitle: '🎮 CONTROLS',
+        controlsDesc: 'Desktop: Mouse to Look · WASD to Walk · Shift to Sprint · E to Collect · F to Toggle Flashlight · ESC for Menu.\nMobile: Virtual D-Pad to move · Drag right screen to look around · Dedicated on-screen Torch, Collect, and Run buttons.',
+        back: 'BACK', desktopHint: 'Click Canvas to Lock Mouse · WASD: Move · SHIFT: Sprint · E: Collect · F: Flashlight · ESC: Menu',
+        gameOverTitle: 'CLAIMED BY THE JINN', gameOverDesc: 'Your screams fade into the decaying walls of the Zamidar Bari...',
+        scripturesRecovered: 'Scriptures Recovered', score: 'Score', tryAgain: 'TRY AGAIN',
+        victoryTitle: 'YOU ESCAPED!', victoryDesc: 'With all 5 sacred scriptures in hand, the supernatural barrier shattered and you escaped into the night!',
+        finalStats: 'Final Score & Escape Time', time: 'Time', playAgain: 'PLAY AGAIN', pts: 'PTS',
+      },
+      bn: {
+        genreBadge: 'বাঙালি সারভাইভাল হরর', title: 'জমিদার বাড়ি',
+        story: 'আপনি এক অন্ধকার, পরিত্যক্ত জমিদার বাড়িতে প্রবেশ করেছেন। অন্ধকার করিডোরে একটি ভয়ঙ্কর জিন ঘুরে বেড়াচ্ছে। অভিশাপ ভেঙে পালাতে প্রাচীন সিন্দুক ও বেদীতে লুকানো ৫টি পবিত্র সুরক্ষাকারী আয়াত খুঁজে নিন!',
+        developedBy: 'Developed by Imaan Interactive', enterMansion: 'বাড়িতে প্রবেশ করুন',
+        howToPlay: 'খেলার নিয়ম ও কাহিনী', langToggle: 'English (EN)', scriptures: 'পবিত্র আয়াত',
+        fear: 'ভয়', battery: 'ব্যাটারি', stamina: 'শক্তি', menu: 'মেনু', run: 'দৌড়',
+        torch: 'টর্চ', collect: 'সংগ্রহ', gameMenuTitle: 'গেম মেনু',
+        resume: 'খেলা চালিয়ে যান', sfx: 'শব্দ', music: 'সঙ্গীত',
+        restart: 'আবার শুরু করুন', quit: 'প্রধান মেনুতে ফিরুন',
+        guideTitle: 'সারভাইভাল হরর গাইড', missionTitle: '🎯 মূল মিশন ও লক্ষ্য',
+        missionDesc: 'জমিদার বাড়ির ৫টি কক্ষ (ডাইনিং হল, খাস কামরা, পাঠাগার, পূর্ব প্রকোষ্ঠ ও উঠান) অনুসন্ধান করে ৫টি পবিত্র সুরক্ষাকারী আয়াত সংগ্রহ করুন। সব আয়াত পাওয়ার পর দক্ষিণ লোহার ফটকে গিয়ে মুক্ত হয়ে পালিয়ে যান!',
+        jinnTitle: '👻 ভয়ঙ্কর জিন',
+        jinnDesc: 'অন্ধকার করিডোরে এক ভয়ানক অতৃপ্ত জিন ঘুরে বেড়াচ্ছে। কাছে আসলেই টর্চের আলো কাঁপবে, ফিসফিসানি শোনা যাবে এবং ভয় বেড়ে যাবে। জিন আপনাকে স্পর্শ করলে অথবা ভয় ১০০% হলে মৃত্যু অনিবার্য!',
+        flashlightTitle: '🔦 টর্চ ও শারীরিক শক্তি',
+        flashlightDesc: 'অন্ধকার ঘরে পথ দেখতে টর্চ ব্যবহার করুন। নিরাপদে থাকলে ব্যাটারি বাঁচাতে মাঝে মাঝে নিভিয়ে রাখুন। দৌড়াতে শক্তি খরচ হয়, জিন আক্রমণ করলে বাঁচার জন্য দৌড়ানোর দম বাঁচান!',
+        controlsTitle: '🎮 নিয়ন্ত্রণ ব্যবস্থা',
+        controlsDesc: 'কম্পিউটার: মাউস দিয়ে দেখুন · WASD দিয়ে হাঁটুন · Shift চেপে দৌড়ান · E দিয়ে সংগ্রহ করুন · F দিয়ে টর্চ অন/অফ · ESC দিয়ে মেনু।\nমোবাইল: ভার্চুয়াল ডি-প্যাড দিয়ে হাঁটুন · স্ক্রিনের ডানপাশে টেনে তাকান · অন-স্ক্রিন টর্চ, সংগ্রহ ও দৌড় বাটন।',
+        back: 'ফিরে যান', desktopHint: 'মাউস লক করতে স্ক্রিনে ক্লিক করুন · WASD: হাঁটা · SHIFT: দৌড় · E: সংগ্রহ · F: টর্চ · ESC: মেনু',
+        gameOverTitle: 'জিনের কবলে মৃত্যু!', gameOverDesc: 'জমিদার বাড়ির নিস্তব্ধ অন্ধকার দেওয়ালে আপনার আর্তনাদ চিরতরে মিলিয়ে গেল...',
+        scripturesRecovered: 'সংগৃহীত পবিত্র আয়াত', score: 'স্কোর', tryAgain: 'আবার চেষ্টা করুন',
+        victoryTitle: 'আপনি মুক্ত ও সফল!', victoryDesc: '৫টি পবিত্র আয়াতের শক্তিতে অপশক্তির মায়াজাল ভেঙে আপনি রাতের অন্ধকারে নিরাপদে পালিয়ে যেতে সক্ষম হয়েছেন!',
+        finalStats: 'সর্বমোট স্কোর ও সময়', time: 'সময়', playAgain: 'আবার খেলুন', pts: 'পয়েন্ট',
+      },
+    };
+
+    // ================================================================
+    // APP COMPONENT
+    // ================================================================
+    function App() {
+      const isMobile = useIsMobile();
+      const [language, setLanguage] = useState('en');
+      const t = TRANSLATIONS[language];
+
+      const [gameState, setGameState] = useState({ status: 'START', score: 0, level: 1, timer: 0 });
+      const gameStateRef = useRef(gameState);
+      gameStateRef.current = gameState;
+
+      const [gameKey, setGameKey] = useState(0);
+      const [collectedIds, setCollectedIds] = useState([]);
+      const [isGameMenuOpen, setIsGameMenuOpen] = useState(false);
+      const [isHowToPlayOpen, setIsHowToPlayOpen] = useState(false);
+      const [isMusicMuted, setIsMusicMuted] = useState(false);
+      const [isSfxMuted, setIsSfxMuted] = useState(false);
+
+      const [hudStats, setHudStats] = useState({
+        stamina: 100, battery: 100, fear: 0, flashlightOn: true, nearPrompt: null, jinnDistance: 30,
+      });
+
+      const inputRef = useRef({
+        actions: { left: false, right: false, up: false, down: false, confirm: false, cancel: false, tap: false },
+        pointer: { nx: 0, ny: 0, clientX: 0, clientY: 0, down: false },
+      });
+
+      useEffect(() => {
+        if (gameState.status !== 'PLAYING' || isGameMenuOpen || isHowToPlayOpen) return;
+        const timerId = setInterval(() => {
+          setGameState((prev) => ({ ...prev, timer: (prev.timer || 0) + 1 }));
+        }, 1000);
+        return () => clearInterval(timerId);
+      }, [gameState.status, isGameMenuOpen, isHowToPlayOpen]);
+
+      useEffect(() => {
+        window.canHandleBackKey = ['PLAYING', 'PAUSED'].includes(gameState.status);
+      }, [gameState.status]);
+
+      useEffect(() => {
+        const handleKeyDown = (e) => {
+          if (e.key === 'Escape') {
+            if (gameState.status === 'PLAYING') {
+              if (isHowToPlayOpen) setIsHowToPlayOpen(false);
+              else setIsGameMenuOpen((prev) => !prev);
+            }
+          }
+          if (e.key.toLowerCase() === 'f' && gameState.status === 'PLAYING') inputRef.current.customFlashlight = true;
+          if (e.key.toLowerCase() === 'e' && gameState.status === 'PLAYING') inputRef.current.customInteract = true;
+          if (e.key === 'Shift' && gameState.status === 'PLAYING') inputRef.current.customSprint = true;
+        };
+        const handleKeyUp = (e) => {
+          if (e.key.toLowerCase() === 'f') inputRef.current.customFlashlight = false;
+          if (e.key.toLowerCase() === 'e') inputRef.current.customInteract = false;
+          if (e.key === 'Shift') inputRef.current.customSprint = false;
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        window.addEventListener('keyup', handleKeyUp);
+        return () => {
+          window.removeEventListener('keydown', handleKeyDown);
+          window.removeEventListener('keyup', handleKeyUp);
+        };
+      }, [gameState.status, isHowToPlayOpen]);
+
+      const initGame = useCallback(() => {
+        setCollectedIds([]);
+        setIsGameMenuOpen(false);
+        setIsHowToPlayOpen(false);
+        setGameState({ status: 'PLAYING', score: 0, level: 1, timer: 0 });
+        setGameKey((prev) => prev + 1);
+      }, []);
+
+      const handleCollectScripture = useCallback((id) => {
+        setCollectedIds((prev) => {
+          if (prev.includes(id)) return prev;
+          const next = [...prev, id];
+          setGameState((g) => ({ ...g, score: next.length * 200 }));
+          return next;
+        });
+      }, []);
+
+      const handleUpdateHUD = useCallback((stats) => { setHudStats(stats); }, []);
+
+      const isMusicPlaying = ['PLAYING', 'PAUSED'].includes(gameState.status) && !isMusicMuted;
+
+      const touchLookStart = useRef(null);
+      const handleTouchLookStart = (e) => { e.currentTarget.setPointerCapture(e.pointerId); touchLookStart.current = { x: e.clientX, y: e.clientY }; };
+      const handleTouchLookMove = (e) => {
+        if (!touchLookStart.current) return;
+        const dx = e.clientX - touchLookStart.current.x;
+        const dy = e.clientY - touchLookStart.current.y;
+        touchLookStart.current = { x: e.clientX, y: e.clientY };
+        const cur = inputRef.current.touchLookDelta || { x: 0, y: 0 };
+        inputRef.current.touchLookDelta = { x: cur.x + dx, y: cur.y + dy };
+      };
+      const handleTouchLookEnd = () => { touchLookStart.current = null; };
+
+      const fearPercent = clamp(Math.floor(hudStats.fear), 0, 100);
+      const batteryPercent = clamp(Math.floor(hudStats.battery), 0, 100);
+      const staminaPercent = clamp(Math.floor(hudStats.stamina), 0, 100);
+
+      // ============ RENDER ============
+      return React.createElement('div', {
+        className: 'fixed inset-0 overflow-hidden touch-none flex flex-col bg-zinc-950 text-white font-sans select-none',
+      },
+        // Background music
+        React.createElement(BackgroundMusic, {
+          url: getConfig('backgroundMusicUrl'),
+          isPlaying: isMusicPlaying,
+          isMuted: isMusicMuted,
+          volume: getConfig('defaultMusicVolume'),
+        }),
+
+        // Fear vignette overlay
+        gameState.status === 'PLAYING' && fearPercent > 10 && React.createElement('div', {
+          className: 'pointer-events-none absolute inset-0 z-10 transition-opacity duration-300',
+          style: {
+            boxShadow: `inset 0 0 ${Math.min(160, fearPercent * 1.8)}px rgba(${fearPercent > 60 ? '180, 20, 20' : '90, 10, 10'}, ${fearPercent / 120})`,
+          },
+        }),
+
+        // Top HUD
+        gameState.status === 'PLAYING' && React.createElement('div', {
+          className: 'w-full flex justify-between items-center px-4 md:px-8 py-2 md:py-3 pointer-events-none z-20 shrink-0 bg-gradient-to-b from-black/80 to-transparent',
+        },
+          // Left side - stats
+          React.createElement('div', { className: 'flex flex-col gap-1 pointer-events-auto' },
+            React.createElement('div', { className: 'flex items-center gap-3' },
+              React.createElement('div', { className: 'bg-amber-950/80 border border-amber-600/60 rounded px-2.5 py-1 flex items-center gap-1.5 shadow-lg backdrop-blur-sm' },
+                React.createElement('span', { className: 'text-amber-300 text-xs md:text-sm font-black tracking-wider font-serif' }, `📜 ${t.scriptures}:`),
+                React.createElement('span', { className: 'text-yellow-400 font-black text-sm md:text-base' }, `${collectedIds.length} / ${SCRIPTURE_DATA.length}`)
+              ),
+              gameState.timer !== undefined && React.createElement('div', {
+                className: 'bg-zinc-900/80 border border-zinc-700/60 rounded px-2.5 py-1 text-xs md:text-sm text-zinc-300 font-mono',
+              }, `⏱ ${formatTime(gameState.timer)}`)
+            ),
+            // Vital bars
+            React.createElement('div', { className: 'flex flex-wrap items-center gap-2 md:gap-3 text-[10px] md:text-xs' },
+              // Fear
+              React.createElement('div', { className: 'flex items-center gap-1.5 bg-black/70 border border-zinc-800 rounded px-2 py-0.5' },
+                React.createElement(Flame, { size: 12, className: fearPercent > 50 ? 'text-red-500 animate-pulse' : 'text-zinc-400' }),
+                React.createElement('span', { className: 'text-zinc-300 font-semibold' }, `${t.fear}:`),
+                React.createElement('div', { className: 'w-14 md:w-20 h-2 bg-zinc-800 rounded-full overflow-hidden border border-zinc-700' },
+                  React.createElement('div', {
+                    className: `h-full transition-all duration-200 ${fearPercent > 70 ? 'bg-red-600 animate-pulse' : fearPercent > 40 ? 'bg-orange-500' : 'bg-yellow-500'}`,
+                    style: { width: `${fearPercent}%` },
+                  })
+                ),
+                React.createElement('span', { className: 'font-mono text-zinc-400' }, `${fearPercent}%`)
+              ),
+              // Battery
+              React.createElement('div', { className: 'flex items-center gap-1.5 bg-black/70 border border-zinc-800 rounded px-2 py-0.5' },
+                React.createElement(Zap, { size: 12, className: hudStats.flashlightOn ? 'text-yellow-400' : 'text-zinc-600' }),
+                React.createElement('span', { className: 'text-zinc-300 font-semibold' }, `${t.battery}:`),
+                React.createElement('div', { className: 'w-12 md:w-16 h-2 bg-zinc-800 rounded-full overflow-hidden border border-zinc-700' },
+                  React.createElement('div', { className: 'h-full bg-yellow-400 transition-all duration-200', style: { width: `${batteryPercent}%` } })
+                ),
+                React.createElement('span', { className: 'font-mono text-zinc-400' }, `${batteryPercent}%`)
+              ),
+              // Stamina
+              React.createElement('div', { className: 'flex items-center gap-1.5 bg-black/70 border border-zinc-800 rounded px-2 py-0.5' },
+                React.createElement(Activity, { size: 12, className: 'text-cyan-400' }),
+                React.createElement('span', { className: 'text-zinc-300 font-semibold' }, `${t.stamina}:`),
+                React.createElement('div', { className: 'w-12 md:w-16 h-2 bg-zinc-800 rounded-full overflow-hidden border border-zinc-700' },
+                  React.createElement('div', { className: 'h-full bg-cyan-400 transition-all duration-200', style: { width: `${staminaPercent}%` } })
+                )
+              )
+            )
+          ),
+          // Right side - menu button
+          React.createElement('div', { className: 'pointer-events-auto shrink-0 pl-2' },
+            React.createElement('button', {
+              onClick: () => { gameAudio.playCrispClick(); setIsGameMenuOpen(true); },
+              'data-testid': 'menu-button',
+              className: 'bg-zinc-800/90 hover:bg-zinc-700 text-amber-400 border border-amber-600/60 font-bold px-3 py-1.5 md:px-4 md:py-2 rounded-lg text-xs md:text-sm tracking-wide shadow-lg transition-all flex items-center gap-1.5 backdrop-blur-md active:scale-95',
+            },
+              React.createElement('span', null, '≡'),
+              React.createElement('span', null, t.menu)
+            )
+          )
+        ),
+
+        // 3D Canvas container
+        React.createElement('div', { className: 'flex-1 w-full min-h-0 relative flex items-center justify-center' },
+          React.createElement(Game, {
+            key: gameKey, gameState, setGameState, exitChat: () => Promise.resolve(),
+            gameStateRef, onCollectScripture: handleCollectScripture,
+            onUpdateHUD: handleUpdateHUD, collectedIds,
+            isTouchDevice: isMobile, inputRef,
+          }),
+
+          // Crosshair & interaction prompt
+          gameState.status === 'PLAYING' && !isGameMenuOpen && !isHowToPlayOpen && React.createElement('div', {
+            className: 'pointer-events-none absolute inset-0 flex flex-col items-center justify-center z-15',
+          },
+            React.createElement('div', { className: 'w-1.5 h-1.5 rounded-full bg-amber-200/60 shadow-[0_0_8px_rgba(255,255,255,0.8)]' }),
+            hudStats.nearPrompt && React.createElement('div', {
+              className: 'mt-8 bg-black/85 border border-amber-500/80 px-4 py-2 rounded-lg shadow-2xl backdrop-blur-md animate-bounce',
+            },
+              React.createElement('p', { className: 'text-amber-300 font-bold text-xs md:text-sm tracking-wide' }, hudStats.nearPrompt)
+            )
+          ),
+
+          // Desktop hint
+          gameState.status === 'PLAYING' && !isMobile && !isGameMenuOpen && React.createElement('div', {
+            className: 'absolute bottom-3 w-full text-center pointer-events-none z-10',
+          },
+            React.createElement('div', { className: 'inline-block bg-black/60 border border-zinc-800 px-3 py-1 rounded text-[11px] text-zinc-400' }, t.desktopHint)
+          ),
+
+          // Mobile controls
+          gameState.status === 'PLAYING' && isMobile && !isGameMenuOpen && React.createElement('div', {
+            className: 'absolute inset-0 pointer-events-none z-25 flex justify-between items-end p-4 md:p-8',
+          },
+            // Touch look zone
+            React.createElement('div', {
+              className: 'absolute inset-0 pointer-events-auto touch-none',
+              onPointerDown: handleTouchLookStart,
+              onPointerMove: handleTouchLookMove,
+              onPointerUp: handleTouchLookEnd,
+              onPointerCancel: handleTouchLookEnd,
+            }),
+            // D-Pad
+            React.createElement('div', { className: 'relative pointer-events-auto z-30 flex flex-col items-center gap-1 bg-black/50 p-2 rounded-2xl border border-zinc-800/60 backdrop-blur-sm' },
+              React.createElement('button', {
+                onPointerDown: () => (inputRef.current.actions.up = true),
+                onPointerUp: () => (inputRef.current.actions.up = false),
+                onPointerLeave: () => (inputRef.current.actions.up = false),
+                className: 'w-12 h-12 bg-zinc-800/90 active:bg-amber-600 rounded-xl flex items-center justify-center font-bold text-white text-sm shadow',
+              }, '▲'),
+              React.createElement('div', { className: 'flex gap-2' },
+                React.createElement('button', {
+                  onPointerDown: () => (inputRef.current.actions.left = true),
+                  onPointerUp: () => (inputRef.current.actions.left = false),
+                  onPointerLeave: () => (inputRef.current.actions.left = false),
+                  className: 'w-12 h-12 bg-zinc-800/90 active:bg-amber-600 rounded-xl flex items-center justify-center font-bold text-white text-sm shadow',
+                }, '◀'),
+                React.createElement('button', {
+                  onPointerDown: () => (inputRef.current.actions.down = true),
+                  onPointerUp: () => (inputRef.current.actions.down = false),
+                  onPointerLeave: () => (inputRef.current.actions.down = false),
+                  className: 'w-12 h-12 bg-zinc-800/90 active:bg-amber-600 rounded-xl flex items-center justify-center font-bold text-white text-sm shadow',
+                }, '▼'),
+                React.createElement('button', {
+                  onPointerDown: () => (inputRef.current.actions.right = true),
+                  onPointerUp: () => (inputRef.current.actions.right = false),
+                  onPointerLeave: () => (inputRef.current.actions.right = false),
+                  className: 'w-12 h-12 bg-zinc-800/90 active:bg-amber-600 rounded-xl flex items-center justify-center font-bold text-white text-sm shadow',
+                }, '▶')
+              )
+            ),
+            // Action buttons
+            React.createElement('div', { className: 'relative pointer-events-auto z-30 flex flex-col items-end gap-2' },
+              React.createElement('button', {
+                onPointerDown: () => (inputRef.current.customSprint = true),
+                onPointerUp: () => (inputRef.current.customSprint = false),
+                onPointerLeave: () => (inputRef.current.customSprint = false),
+                className: 'w-12 h-12 bg-cyan-950/90 border border-cyan-500/60 active:bg-cyan-600 rounded-full flex flex-col items-center justify-center text-[10px] font-bold text-cyan-200 shadow-lg',
+              },
+                React.createElement(Activity, { size: 16 }),
+                t.run
+              ),
+              React.createElement('div', { className: 'flex gap-2' },
+                React.createElement('button', {
+                  onPointerDown: () => { inputRef.current.customFlashlight = true; setTimeout(() => { inputRef.current.customFlashlight = false; }, 100); },
+                  className: `w-14 h-14 border rounded-full flex flex-col items-center justify-center text-[10px] font-bold shadow-lg transition-colors ${hudStats.flashlightOn ? 'bg-amber-500/90 border-amber-300 text-black' : 'bg-zinc-800/90 border-zinc-600 text-zinc-400'}`,
+                },
+                  React.createElement(Zap, { size: 18 }),
+                  t.torch
+                ),
+                React.createElement('button', {
+                  onPointerDown: () => { inputRef.current.customInteract = true; setTimeout(() => { inputRef.current.customInteract = false; }, 150); },
+                  className: 'w-14 h-14 bg-amber-700/90 border border-amber-400 active:bg-amber-500 rounded-full flex flex-col items-center justify-center text-[10px] font-bold text-white shadow-xl',
+                },
+                  React.createElement(Flame, { size: 18 }),
+                  t.collect
+                )
+              )
+            )
+          )
+        ),
+
+        // ============ OVERLAYS ============
+
+        // Start Menu
+        gameState.status === 'START' && React.createElement(MenuOverlay, { tone: 'neutral' },
+          React.createElement('div', { className: 'w-full max-w-md flex flex-col items-center bg-zinc-950 border-2 border-amber-700/60 rounded-2xl p-6 md:p-8 m-4 shadow-[0_0_50px_rgba(180,83,9,0.3)] relative' },
+            // Top bar
+            React.createElement('div', { className: 'w-full flex justify-between items-center mb-3' },
+              React.createElement('div', { className: 'text-amber-500 text-xs uppercase tracking-widest font-mono font-bold' }, t.genreBadge),
+              React.createElement('button', {
+                onClick: () => { gameAudio.playCrispClick(); setLanguage((prev) => (prev === 'en' ? 'bn' : 'en')); },
+                className: 'bg-zinc-900 hover:bg-zinc-800 text-amber-300 border border-amber-500/50 px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shadow active:scale-95',
+              },
+                React.createElement(Globe, { size: 13 }),
+                React.createElement('span', null, t.langToggle)
+              )
+            ),
+            React.createElement('h1', { className: 'text-3xl md:text-4xl font-black text-amber-400 text-center mb-3 font-serif tracking-wide drop-shadow-[0_2px_10px_rgba(234,179,8,0.5)]' }, t.title),
+            React.createElement('p', { className: 'text-zinc-300 text-xs md:text-sm text-center mb-6 leading-relaxed border-y border-zinc-800 py-3' }, t.story),
+            React.createElement('div', { className: 'w-full flex flex-col gap-3' },
+              React.createElement('button', {
+                onClick: () => { gameAudio.playCrispClick(); initGame(); },
+                autoFocus: true,
+                'data-testid': 'start-button',
+                className: 'w-full bg-gradient-to-r from-amber-600 to-yellow-500 hover:from-amber-500 hover:to-yellow-400 text-black px-6 py-3 rounded-full font-black text-base md:text-lg transition-all transform active:scale-95 flex items-center justify-center gap-2 shadow-lg',
+              },
+                React.createElement(Play, { size: 22, className: 'fill-black' }),
+                t.enterMansion
+              ),
+              React.createElement('button', {
+                onClick: () => { gameAudio.playCrispClick(); setIsHowToPlayOpen(true); },
+                className: 'w-full bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-700 px-6 py-2.5 rounded-full font-bold text-sm transition-all flex items-center justify-center gap-2',
+              },
+                React.createElement(HelpCircle, { size: 18 }),
+                t.howToPlay
+              )
+            ),
+            React.createElement('div', { className: 'mt-6 pt-3 border-t border-zinc-900 w-full text-center' },
+              React.createElement('span', { className: 'text-[11px] md:text-xs font-serif text-amber-500/80 tracking-wider' }, t.developedBy)
+            )
+          )
+        ),
+
+        // Game Menu
+        isGameMenuOpen && React.createElement(MenuOverlay, { tone: 'neutral', zIndex: 40 },
+          React.createElement('div', { className: 'w-full max-w-md flex flex-col items-center bg-zinc-950 border-2 border-amber-600/70 rounded-2xl p-6 md:p-8 m-4 shadow-2xl' },
+            React.createElement('h2', { className: 'text-2xl md:text-3xl font-black text-amber-400 text-center mb-6 font-serif' }, t.gameMenuTitle),
+            React.createElement('div', { className: 'w-full flex flex-col gap-3' },
+              React.createElement('button', {
+                onClick: () => { gameAudio.playCrispClick(); setIsGameMenuOpen(false); },
+                autoFocus: true,
+                className: 'w-full bg-amber-500 hover:bg-amber-400 text-black py-2.5 rounded-xl font-bold text-base transition-colors flex items-center justify-center gap-2',
+              },
+                React.createElement(Play, { size: 20, className: 'fill-black' }),
+                t.resume
+              ),
+              // Audio toggles
+              React.createElement('div', { className: 'grid grid-cols-2 gap-2 my-1' },
+                React.createElement('button', {
+                  onClick: () => { const newMuted = gameAudio.toggleMute(); setIsSfxMuted(newMuted); },
+                  className: `py-2 rounded-xl text-xs font-bold border transition-colors flex items-center justify-center gap-1.5 ${isSfxMuted ? 'bg-zinc-900 text-zinc-500 border-zinc-800' : 'bg-zinc-800 text-amber-300 border-amber-600/50'}`,
+                },
+                  isSfxMuted ? React.createElement(VolumeX, { size: 16 }) : React.createElement(Volume2, { size: 16 }),
+                  `${t.sfx}: ${isSfxMuted ? 'OFF' : 'ON'}`
+                ),
+                React.createElement('button', {
+                  onClick: () => setIsMusicMuted((prev) => !prev),
+                  className: `py-2 rounded-xl text-xs font-bold border transition-colors flex items-center justify-center gap-1.5 ${isMusicMuted ? 'bg-zinc-900 text-zinc-500 border-zinc-800' : 'bg-zinc-800 text-amber-300 border-amber-600/50'}`,
+                },
+                  isMusicMuted ? React.createElement(VolumeX, { size: 16 }) : React.createElement(Volume2, { size: 16 }),
+                  `${t.music}: ${isMusicMuted ? 'OFF' : 'ON'}`
+                )
+              ),
+              React.createElement('button', {
+                onClick: () => { gameAudio.playCrispClick(); setIsHowToPlayOpen(true); },
+                className: 'w-full bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-700 py-2.5 rounded-xl font-semibold text-sm transition-colors flex items-center justify-center gap-2',
+              },
+                React.createElement(HelpCircle, { size: 18 }),
+                t.howToPlay
+              ),
+              React.createElement('button', {
+                onClick: () => { gameAudio.playCrispClick(); initGame(); },
+                className: 'w-full bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-700 py-2.5 rounded-xl font-semibold text-sm transition-colors flex items-center justify-center gap-2',
+              },
+                React.createElement(RotateCw, { size: 18 }),
+                t.restart
+              ),
+              React.createElement('button', {
+                onClick: () => { gameAudio.playCrispClick(); setIsGameMenuOpen(false); setGameState((prev) => ({ ...prev, status: 'START' })); },
+                className: 'w-full bg-red-950/80 hover:bg-red-900 border border-red-800 text-red-200 py-2.5 rounded-xl font-bold text-sm transition-colors mt-2',
+              }, t.quit)
+            )
+          )
+        ),
+
+        // How to Play
+        isHowToPlayOpen && React.createElement(MenuOverlay, { tone: 'neutral', zIndex: 1001 },
+          React.createElement('div', { className: 'w-full max-w-lg flex flex-col bg-zinc-950 border-2 border-amber-600 rounded-2xl p-6 md:p-8 m-4 shadow-2xl text-zinc-200' },
+            React.createElement('h2', { className: 'text-2xl font-black text-amber-400 text-center mb-4 font-serif' }, t.guideTitle),
+            React.createElement('div', { className: 'flex flex-col gap-3 text-xs md:text-sm max-h-[60vh] overflow-y-auto pr-2' },
+              React.createElement('div', { className: 'bg-zinc-900/80 p-3 rounded-xl border border-zinc-800' },
+                React.createElement('h3', { className: 'font-bold text-amber-300 mb-1' }, t.missionTitle),
+                React.createElement('p', { className: 'text-zinc-300' }, t.missionDesc)
+              ),
+              React.createElement('div', { className: 'bg-zinc-900/80 p-3 rounded-xl border border-zinc-800' },
+                React.createElement('h3', { className: 'font-bold text-red-400 mb-1' }, t.jinnTitle),
+                React.createElement('p', { className: 'text-zinc-300' }, t.jinnDesc)
+              ),
+              React.createElement('div', { className: 'bg-zinc-900/80 p-3 rounded-xl border border-zinc-800' },
+                React.createElement('h3', { className: 'font-bold text-cyan-300 mb-1' }, t.flashlightTitle),
+                React.createElement('p', { className: 'text-zinc-300' }, t.flashlightDesc)
+              ),
+              React.createElement('div', { className: 'bg-zinc-900/80 p-3 rounded-xl border border-zinc-800' },
+                React.createElement('h3', { className: 'font-bold text-yellow-300 mb-1' }, t.controlsTitle),
+                React.createElement('p', { className: 'text-zinc-300 whitespace-pre-line' }, t.controlsDesc)
+              )
+            ),
+            React.createElement('button', {
+              onClick: () => { gameAudio.playCrispClick(); setIsHowToPlayOpen(false); },
+              autoFocus: true,
+              className: 'mt-6 w-full bg-amber-500 hover:bg-amber-400 text-black py-3 rounded-xl font-black text-sm tracking-wide transition-colors',
+            }, t.back)
+          )
+        ),
+
+        // Game Over
+        gameState.status === 'GAME_OVER' && React.createElement(MenuOverlay, { tone: 'danger' },
+          React.createElement('div', { className: 'w-full max-w-md flex flex-col items-center bg-zinc-950 border-2 border-red-700 rounded-2xl p-6 md:p-8 m-4 shadow-[0_0_50px_rgba(220,38,38,0.5)]' },
+            React.createElement('h2', { className: 'text-3xl md:text-4xl font-black text-red-500 text-center mb-2 font-serif tracking-wider animate-pulse' }, t.gameOverTitle),
+            React.createElement('p', { className: 'text-zinc-300 text-xs md:text-sm text-center mb-4' }, t.gameOverDesc),
+            React.createElement('div', { className: 'bg-red-950/40 border border-red-800/60 rounded-xl p-4 w-full text-center mb-6' },
+              React.createElement('div', { className: 'text-xs text-red-300 uppercase tracking-widest font-mono' }, t.scripturesRecovered),
+              React.createElement('div', { className: 'text-2xl font-black text-amber-400 font-mono my-1' }, `${collectedIds.length} / ${SCRIPTURE_DATA.length}`),
+              React.createElement('div', { className: 'text-xs text-zinc-400' }, `${t.score}: ${gameState.score} ${t.pts}`)
+            ),
+            React.createElement('button', {
+              onClick: () => { gameAudio.playCrispClick(); initGame(); },
+              autoFocus: true,
+              className: 'w-full bg-red-600 hover:bg-red-500 text-white py-3 rounded-full font-black text-base md:text-lg transition-colors flex items-center justify-center gap-2 shadow-lg',
+            },
+              React.createElement(RotateCw, { size: 22 }),
+              t.tryAgain
+            )
+          )
+        ),
+
+        // Victory
+        gameState.status === 'VICTORY' && React.createElement(MenuOverlay, { tone: 'victory' },
+          React.createElement('div', { className: 'w-full max-w-md flex flex-col items-center bg-zinc-950 border-2 border-emerald-500 rounded-2xl p-6 md:p-8 m-4 shadow-[0_0_50px_rgba(16,185,129,0.4)]' },
+            React.createElement('h2', { className: 'text-3xl md:text-4xl font-black text-emerald-400 text-center mb-2 font-serif tracking-wider' }, t.victoryTitle),
+            React.createElement('p', { className: 'text-zinc-300 text-xs md:text-sm text-center mb-4' }, t.victoryDesc),
+            React.createElement('div', { className: 'bg-emerald-950/40 border border-emerald-700/60 rounded-xl p-4 w-full text-center mb-6' },
+              React.createElement('div', { className: 'text-xs text-emerald-300 uppercase tracking-widest font-mono' }, t.finalStats),
+              React.createElement('div', { className: 'text-3xl font-black text-yellow-400 font-mono my-1' }, `${gameState.score} ${t.pts}`),
+              gameState.timer !== undefined && React.createElement('div', { className: 'text-xs text-zinc-300 font-mono' }, `${t.time}: ${formatTime(gameState.timer)}`)
+            ),
+            React.createElement('button', {
+              onClick: () => { gameAudio.playCrispClick(); initGame(); },
+              autoFocus: true,
+              className: 'w-full bg-emerald-500 hover:bg-emerald-400 text-black py-3 rounded-full font-black text-base md:text-lg transition-colors flex items-center justify-center gap-2 shadow-lg',
+            },
+              React.createElement(RotateCw, { size: 22 }),
+              t.playAgain
+            )
+          )
+        )
+      );
+    }
+
+    // ================================================================
+    // MOUNT
+    // ================================================================
+    const rootElement = document.getElementById('root');
+    if (!rootElement) throw new Error('Root element not found');
+    const root = createRoot(rootElement);
+    root.render(React.createElement(App));
+
+  </script>
+</body>
+</html>
